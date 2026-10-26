@@ -1,0 +1,514 @@
+package com.prabhat.photocraft.tests
+
+import com.prabhat.photocraft.edit.Adjustment
+import com.prabhat.photocraft.edit.Adjustments
+import com.prabhat.photocraft.edit.CropGeometry
+import com.prabhat.photocraft.edit.CropHandle
+import com.prabhat.photocraft.edit.CropHandleMath
+import com.prabhat.photocraft.edit.CropRatio
+import com.prabhat.photocraft.edit.CropSelection
+import com.prabhat.photocraft.edit.EditState
+import com.prabhat.photocraft.edit.EditStateCodec
+import com.prabhat.photocraft.edit.EditingState
+import com.prabhat.photocraft.edit.Filter
+import com.prabhat.photocraft.edit.FilterMath
+import com.prabhat.photocraft.edit.FilterSettings
+import com.prabhat.photocraft.edit.M5StateCodec
+import com.prabhat.photocraft.export.ExportMemoryPolicy
+import com.prabhat.photocraft.export.ExportSize
+import com.prabhat.photocraft.preset.Preset
+import com.prabhat.photocraft.preset.PresetCodec
+import com.prabhat.photocraft.preset.PresetName
+import kotlin.math.abs
+import kotlin.system.exitProcess
+
+private var failureCount = 0
+
+private fun verify(name: String, condition: Boolean) {
+    if (condition) {
+        println("PASS  $name")
+    } else {
+        failureCount += 1
+        println("FAIL  $name")
+    }
+}
+
+private fun close(actual: Float, expected: Float, tolerance: Float = 0.0002f): Boolean =
+    abs(actual - expected) <= tolerance
+
+private fun samplePixels(): IntArray = intArrayOf(
+    0xFF808080.toInt(),
+    0xFFB08050.toInt(),
+    0xFF506070.toInt(),
+    0xFFE8E8E8.toInt(),
+    0xFF202020.toInt(),
+    0xFFC03030.toInt(),
+    0xFF30C060.toInt(),
+    0xFF3050D0.toInt(),
+    0xFF112233.toInt()
+)
+
+private fun testFilterModel() {
+    verify("natural filter is neutral", FilterSettings.NEUTRAL.isNeutral())
+    verify(
+        "zero intensity is neutral for any filter",
+        FilterSettings(Filter.VINTAGE, 0).isNeutral()
+    )
+    verify(
+        "nonzero intensity is active",
+        !FilterSettings(Filter.WARM, 1).isNeutral()
+    )
+    verify(
+        "filter intensity rejects negative values",
+        runCatching { FilterSettings(Filter.WARM, -1) }.isFailure
+    )
+    verify(
+        "filter intensity rejects values above one hundred",
+        runCatching { FilterSettings(Filter.WARM, 101) }.isFailure
+    )
+    verify("filter enum exposes six styles", Filter.entries.size == 6)
+}
+
+private fun testFilterMath() {
+    val neutral = samplePixels()
+    val neutralCopy = neutral.copyOf()
+    FilterMath.applyInPlace(neutralCopy, FilterSettings.NEUTRAL)
+    verify("neutral filter leaves pixels unchanged", neutral.contentEquals(neutralCopy))
+
+    val zeroIntensity = samplePixels()
+    FilterMath.applyInPlace(zeroIntensity, FilterSettings(Filter.CINEMATIC, 0))
+    verify(
+        "zero intensity is an exact no-op",
+        samplePixels().contentEquals(zeroIntensity)
+    )
+
+    val blackAndWhite = samplePixels()
+    FilterMath.applyInPlace(blackAndWhite, FilterSettings(Filter.BLACK_WHITE, 100))
+    verify(
+        "black and white equalizes channels",
+        blackAndWhite.take(8).all { pixel ->
+            val red = (pixel shr 16) and 0xFF
+            val green = (pixel shr 8) and 0xFF
+            val blue = pixel and 0xFF
+            red == green && green == blue
+        }
+    )
+
+    val alpha = intArrayOf(0x80C03030.toInt())
+    FilterMath.applyInPlace(alpha, FilterSettings(Filter.WARM, 100))
+    verify("filter math preserves alpha", alpha[0] ushr 24 == 0x80)
+
+    val transparent = intArrayOf(0x00123456)
+    FilterMath.applyInPlace(transparent, FilterSettings(Filter.VINTAGE, 100))
+    verify("transparent pixels stay untouched", transparent[0] == 0x00123456)
+
+    val bounded = samplePixels()
+    val untouchedTail = bounded[8]
+    FilterMath.applyInPlace(bounded, FilterSettings(Filter.COOL, 100), 7)
+    verify("filter math respects pixel count", bounded[8] == untouchedTail)
+
+    for (filter in Filter.entries) {
+        val first = samplePixels()
+        val second = samplePixels()
+        FilterMath.applyInPlace(first, FilterSettings(filter, 100))
+        FilterMath.applyInPlace(second, FilterSettings(filter, 100))
+        verify("$filter is deterministic", first.contentEquals(second))
+        if (filter != Filter.NATURAL) {
+            verify(
+                "$filter at full intensity changes colors",
+                !samplePixels().contentEquals(first)
+            )
+        }
+    }
+}
+
+private fun testM5StateCodec() {
+    val state = EditState(
+        adjustments = Adjustments.NEUTRAL.with(Adjustment.EXPOSURE, 12),
+        crop = CropSelection(0.1f, 0.2f, 0.8f, 0.9f),
+        cropRatio = CropRatio.NINE_SIXTEEN,
+        filter = FilterSettings(Filter.VINTAGE, 65)
+    )
+    val encoded = M5StateCodec.encode(state)
+    verify("m5 codec encodes eighteen integers", encoded.size == M5StateCodec.VALUE_COUNT)
+    verify("m5 codec round trips state", M5StateCodec.decode(encoded) == state)
+    verify("m5 codec rejects null input", M5StateCodec.decode(null) == null)
+    verify(
+        "m5 codec rejects wrong length",
+        M5StateCodec.decode(IntArray(17)) == null
+    )
+
+    val invalidRatio = encoded.copyOf()
+    invalidRatio[15] = 99
+    verify("m5 codec rejects an invalid ratio", M5StateCodec.decode(invalidRatio) == null)
+
+    val invalidFilter = encoded.copyOf()
+    invalidFilter[16] = 99
+    verify("m5 codec rejects an invalid filter", M5StateCodec.decode(invalidFilter) == null)
+
+    val invalidIntensity = encoded.copyOf()
+    invalidIntensity[17] = 101
+    verify(
+        "m5 codec rejects invalid intensity",
+        M5StateCodec.decode(invalidIntensity) == null
+    )
+
+    val invalidCrop = encoded.copyOf()
+    invalidCrop[11] = 9000
+    invalidCrop[13] = 1000
+    verify("m5 codec rejects invalid crop bounds", M5StateCodec.decode(invalidCrop) == null)
+
+    val stack = listOf(state, EditState(), state.copy(filter = FilterSettings(Filter.COOL, 30)))
+    val decodedStack = M5StateCodec.decodeStack(M5StateCodec.encodeStack(stack))
+    verify("m5 codec round trips a stack", decodedStack == stack)
+    verify("m5 codec encodes an empty stack", M5StateCodec.encodeStack(emptyList()).isEmpty())
+    verify("m5 codec decodes an empty stack", M5StateCodec.decodeStack(null).isEmpty())
+
+    val legacy = EditStateCodec.decode(EditStateCodec.encode(state))
+    verify("legacy codec still decodes a state", legacy != null)
+    verify(
+        "legacy codec intentionally drops the filter",
+        legacy?.filter == FilterSettings.NEUTRAL
+    )
+}
+
+private fun testPresets() {
+    verify("preset names trim whitespace", PresetName.normalize("  Golden  ") == "Golden")
+    verify("preset names reject blanks", PresetName.normalize("   ") == null)
+    verify(
+        "preset names reject overly long text",
+        PresetName.normalize("x".repeat(PresetName.MAX_LENGTH + 1)) == null
+    )
+    verify(
+        "preset names reject control characters",
+        PresetName.normalize("bad\nname") == null
+    )
+    verify("preset names accept the maximum length", PresetName.isValid("x".repeat(40)))
+
+    val state = EditState(
+        crop = CropSelection(0.2f, 0.1f, 0.9f, 0.95f),
+        cropRatio = CropRatio.SQUARE,
+        filter = FilterSettings(Filter.CINEMATIC, 45)
+    )
+    val preset = Preset("Golden hour", state)
+    val encoded = PresetCodec.encode(preset)
+    verify("preset codec round trips", PresetCodec.decode(encoded) == preset)
+    verify(
+        "preset codec preserves unicode names",
+        PresetCodec.decode(PresetCodec.encode(Preset("Café", state)))?.name == "Café"
+    )
+    verify("preset codec rejects blank input", PresetCodec.decode("") == null)
+    verify("preset codec rejects missing state", PresetCodec.decode("abcd|") == null)
+    verify("preset codec rejects bad hex", PresetCodec.decode("zz|1,2,3") == null)
+    verify("preset codec rejects a short state", PresetCodec.decode("6162|1,2,3") == null)
+    verify(
+        "preset rejects an invalid name",
+        runCatching { Preset(" ", state) }.isFailure
+    )
+
+    val decodedAll = PresetCodec.decodeAll(
+        PresetCodec.encodeAll(
+            listOf(
+                Preset("beta", state),
+                Preset("Alpha", state),
+                Preset("gamma", state)
+            )
+        )
+    )
+    verify(
+        "preset codec sorts names case-insensitively",
+        decodedAll.map { it.name } == listOf("Alpha", "beta", "gamma")
+    )
+    verify("preset codec ignores malformed entries", PresetCodec.decodeAll(setOf("bad")).isEmpty())
+}
+
+private fun testCropHandles() {
+    val crop = CropSelection(0.25f, 0.25f, 0.75f, 0.75f)
+    verify(
+        "corner hit test finds top left",
+        CropHandleMath.hitTest(crop, 0.25f, 0.25f, 0.02f, 0.02f, true) ==
+            CropHandle.TOP_LEFT
+    )
+    verify(
+        "corner hit test finds bottom right",
+        CropHandleMath.hitTest(crop, 0.75f, 0.75f, 0.02f, 0.02f, true) ==
+            CropHandle.BOTTOM_RIGHT
+    )
+    verify(
+        "free mode exposes an edge handle",
+        CropHandleMath.hitTest(crop, 0.5f, 0.25f, 0.02f, 0.02f, true) ==
+            CropHandle.TOP
+    )
+    verify(
+        "fixed mode does not expose edge handles",
+        CropHandleMath.hitTest(crop, 0.5f, 0.25f, 0.02f, 0.02f, false) ==
+            CropHandle.MOVE
+    )
+    verify(
+        "interior hit test finds move",
+        CropHandleMath.hitTest(crop, 0.5f, 0.5f, 0.02f, 0.02f, true) ==
+            CropHandle.MOVE
+    )
+    verify(
+        "outside hit test finds nothing",
+        CropHandleMath.hitTest(crop, 0.05f, 0.05f, 0.02f, 0.02f, true) == null
+    )
+
+    val moved = CropHandleMath.drag(
+        crop,
+        CropHandle.MOVE,
+        0.1f,
+        0.1f,
+        CropRatio.FREE,
+        4000,
+        3000
+    )
+    verify(
+        "move translates the crop",
+        close(moved.left, 0.35f) &&
+            close(moved.top, 0.35f) &&
+            close(moved.right, 0.85f) &&
+            close(moved.bottom, 0.85f)
+    )
+    val clampedMove = CropHandleMath.drag(
+        crop,
+        CropHandle.MOVE,
+        1f,
+        1f,
+        CropRatio.FREE,
+        4000,
+        3000
+    )
+    verify(
+        "move clamps to the image",
+        close(clampedMove.left, 0.5f) &&
+            close(clampedMove.top, 0.5f) &&
+            close(clampedMove.right, 1f) &&
+            close(clampedMove.bottom, 1f)
+    )
+
+    val shrunk = CropHandleMath.drag(
+        crop,
+        CropHandle.LEFT,
+        1f,
+        0f,
+        CropRatio.FREE,
+        4000,
+        3000
+    )
+    verify(
+        "free drag enforces the minimum crop size",
+        close(shrunk.width, CropGeometry.MIN_FRACTION)
+    )
+
+    val fixedCorner = CropHandleMath.drag(
+        crop,
+        CropHandle.BOTTOM_RIGHT,
+        0.1f,
+        0.1f,
+        CropRatio.SQUARE,
+        4000,
+        3000
+    )
+    verify(
+        "fixed corner preserves the pixel ratio",
+        close(
+            fixedCorner.width * 4000f / (fixedCorner.height * 3000f),
+            1f,
+            tolerance = 0.001f
+        )
+    )
+    verify(
+        "fixed corner stays inside the image",
+        fixedCorner.right <= 1f + 0.0001f && fixedCorner.bottom <= 1f + 0.0001f
+    )
+
+    val fixedHorizontal = CropHandleMath.drag(
+        crop,
+        CropHandle.RIGHT,
+        0.1f,
+        0f,
+        CropRatio.SQUARE,
+        4000,
+        3000
+    )
+    verify(
+        "fixed horizontal drag preserves the pixel ratio",
+        close(
+            fixedHorizontal.width * 4000f / (fixedHorizontal.height * 3000f),
+            1f,
+            tolerance = 0.001f
+        )
+    )
+
+    val fixedVertical = CropHandleMath.drag(
+        crop,
+        CropHandle.BOTTOM,
+        0f,
+        0.1f,
+        CropRatio.SQUARE,
+        4000,
+        3000
+    )
+    verify(
+        "fixed vertical drag preserves the pixel ratio",
+        close(
+            fixedVertical.width * 4000f / (fixedVertical.height * 3000f),
+            1f,
+            tolerance = 0.001f
+        )
+    )
+}
+
+private fun testExportMemoryPolicy() {
+    val full = ExportMemoryPolicy.plan(
+        sourceWidth = 4000,
+        sourceHeight = 3000,
+        crop = CropSelection.FULL,
+        size = ExportSize.ORIGINAL
+    )
+    verify("memory policy accepts a moderate original", full != null)
+    verify("memory policy keeps original dimensions", full?.output?.width == 4000 &&
+        full.output.height == 3000)
+    verify("memory policy does not reduce a safe decode", full?.reducedDecode == false)
+    verify("memory policy reports positive estimates", (full?.estimatedBytes ?: 0L) > 0L)
+
+    val reduced = ExportMemoryPolicy.plan(
+        sourceWidth = 4000,
+        sourceHeight = 3000,
+        crop = CropSelection.FULL,
+        size = ExportSize.LONG_EDGE_1080
+    )
+    verify("memory policy reduces long-edge decode", reduced?.reducedDecode == true)
+    verify("memory policy preserves the requested output", reduced?.output?.width == 1080 &&
+        reduced.output.height == 810)
+    verify("memory policy reports reduced decode dimensions", reduced?.decodeWidth == 1080 &&
+        reduced.decodeHeight == 810)
+
+    val cropped = ExportMemoryPolicy.plan(
+        sourceWidth = 4000,
+        sourceHeight = 3000,
+        crop = CropSelection(0.25f, 0.25f, 0.75f, 0.75f),
+        size = ExportSize.ORIGINAL
+    )
+    verify("memory policy maps crop pixels", cropped?.crop?.width == 2000 &&
+        cropped.crop.height == 1500)
+    verify("memory policy exports the cropped original at crop resolution",
+        cropped?.output?.width == 2000 && cropped.output.height == 1500)
+    verify("memory policy keeps a full decode for a cropped original", cropped?.reducedDecode == false)
+    verify("memory policy decodes the full source for a cropped original",
+        cropped?.decodeWidth == 4000 && cropped.decodeHeight == 3000)
+
+    val largeOriginal = ExportMemoryPolicy.plan(
+        sourceWidth = 20000,
+        sourceHeight = 20000,
+        crop = CropSelection.FULL,
+        size = ExportSize.ORIGINAL
+    )
+    verify("memory policy accepts a large original without a fixed cap", largeOriginal != null)
+    verify("memory policy preserves the large original dimensions",
+        largeOriginal?.output?.width == 20000 && largeOriginal.output.height == 20000)
+    verify("memory policy does not silently reduce a large original",
+        largeOriginal?.decodeWidth == 20000 && largeOriginal.decodeHeight == 20000)
+    verify("memory policy marks a large original as full decode",
+        largeOriginal?.reducedDecode == false)
+
+    val reducedHuge = ExportMemoryPolicy.plan(
+        sourceWidth = 20000,
+        sourceHeight = 20000,
+        crop = CropSelection.FULL,
+        size = ExportSize.LONG_EDGE_2048
+    )
+    verify("memory policy allows an explicitly reduced huge decode", reducedHuge != null)
+    verify("memory policy marks the explicit huge decode as reduced",
+        reducedHuge?.reducedDecode == true)
+    verify("memory policy preserves the explicit output size",
+        reducedHuge?.output?.width == 2048 && reducedHuge.output.height == 2048)
+
+    verify(
+        "memory policy rejects invalid dimensions",
+        ExportMemoryPolicy.plan(0, 3000, CropSelection.FULL, ExportSize.ORIGINAL) == null
+    )
+}
+
+private fun testEditingStateM5() {
+    val state = EditingState()
+    verify("new state starts with an empty label", state.history().first().label.isEmpty())
+    state.update(Adjustment.EXPOSURE, 10, "Exposure")
+    state.update(Adjustment.CONTRAST, 20, "Contrast")
+    val history = state.history()
+    verify("history exposes the current label", history.first().label == "Contrast")
+    verify("history exposes the previous label", history.getOrNull(1)?.label == "Exposure")
+    verify("history exposes the original label", history.getOrNull(2)?.label == "")
+    verify("history marks only one current point", history.count { it.isCurrent } == 1)
+
+    verify("restore moves back through history", state.restoreTo(1))
+    verify("restore reverts the latest edit", state.adjustments.contrast == 0)
+    verify("restore keeps the earlier edit", state.adjustments.exposure == 10)
+    verify("restore exposes redo", state.canRedo)
+    verify("restore restores the previous label", state.history().first().label == "Exposure")
+    val previousState = state.state
+    verify("restore rejects an invalid step count", !state.restoreTo(100))
+    verify("restore leaves the state unchanged after failure", state.state == previousState)
+
+    state.updateFilter(Filter.WARM, 40, "Warmth")
+    verify("filter update changes the filter", state.filter == FilterSettings(Filter.WARM, 40))
+    verify("filter update records its label", state.history().first().label == "Warmth")
+    verify("filter update makes the state modified", state.isModified)
+    verify("filter update supports undo", state.undo() && state.filter == FilterSettings.NEUTRAL)
+
+    val presetState = EditState(
+        crop = CropSelection(0.1f, 0.1f, 0.9f, 0.9f),
+        cropRatio = CropRatio.SQUARE,
+        filter = FilterSettings(Filter.VINTAGE, 80)
+    )
+    verify("preset application changes state", state.applyPreset(presetState, "Preset"))
+    verify("preset application keeps the preset state", state.state == presetState)
+    verify("preset application records its label", state.history().first().label == "Preset")
+    verify("preset application can be undone", state.undo())
+
+    val gesture = EditingState()
+    gesture.beginGesture()
+    gesture.update(Adjustment.SHADOWS, 10, "Shadows")
+    gesture.update(Adjustment.SHADOWS, 20, "Shadows")
+    verify("gesture does not commit before release", !gesture.canUndo)
+    gesture.endGesture()
+    verify("gesture commits one undo step", gesture.canUndo)
+    verify("gesture keeps the final value", gesture.adjustments.shadows == 20)
+
+    val snapshot = state.snapshot()
+    val restored = EditingState.restored(snapshot)
+    verify("snapshot preserves the current label", restored.history().first().label ==
+        snapshot.currentLabel)
+    verify("snapshot preserves undo labels", restored.canUndo == state.canUndo)
+    verify("snapshot preserves redo labels", restored.canRedo == state.canRedo)
+    verify("snapshot preserves filter state", restored.filter == state.filter)
+
+    val resetState = EditingState()
+    resetState.update(Adjustment.EXPOSURE, 30, "Exposure")
+    verify("reset requires a modified state", resetState.reset("Reset"))
+    verify("reset returns to neutral", resetState.state.isNeutral())
+    verify("reset records its label", resetState.history().first().label == "Reset")
+    verify("reset can be undone", resetState.undo() && resetState.adjustments.exposure == 30)
+
+    val revisionState = EditingState()
+    val revision = revisionState.revision
+    revisionState.update(Adjustment.EXPOSURE, 5)
+    verify("edits advance the revision", revisionState.revision > revision)
+}
+
+fun main() {
+    testFilterModel()
+    testFilterMath()
+    testM5StateCodec()
+    testPresets()
+    testCropHandles()
+    testExportMemoryPolicy()
+    testEditingStateM5()
+
+    if (failureCount > 0) {
+        println("$failureCount test(s) failed")
+        exitProcess(1)
+    }
+    println("All M5 tests passed")
+}

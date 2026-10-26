@@ -1,0 +1,152 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD="$ROOT/build"
+EDIT_DIR="$ROOT/app/src/main/kotlin/com/prabhat/photocraft/edit"
+EXPORT_DIR="$ROOT/app/src/main/kotlin/com/prabhat/photocraft/export"
+UTIL_DIR="$ROOT/app/src/main/kotlin/com/prabhat/photocraft/util"
+M2_TESTS="$ROOT/tests/M2Tests.kt"
+M3_TESTS="$ROOT/tests/M3Tests.kt"
+M4_TESTS="$ROOT/tests/M4Tests.kt"
+M5_TESTS="$ROOT/tests/M5Tests.kt"
+M5_1_TESTS="$ROOT/tests/M5_1Tests.kt"
+M5_2_TESTS="$ROOT/tests/M5_2Tests.kt"
+
+for tool in kotlinc java mktemp; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        printf 'Missing required tool: %s\n' "$tool" >&2
+        exit 1
+    fi
+done
+
+mkdir -p "$BUILD"
+WORK="$(mktemp -d "$BUILD/test-M4.XXXXXXXX")"
+cleanup() {
+    rm -rf -- "$WORK"
+}
+trap cleanup EXIT
+printf 'Isolated test directory: %s\n' "$WORK"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/EditingState.kt" \
+    "$EDIT_DIR/AdjustmentMath.kt" \
+    "$M2_TESTS" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/m2-tests.jar"
+
+printf 'Running M2 adjustment and history tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/m2-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/EditingState.kt" \
+    "$EDIT_DIR/AdjustmentMath.kt" \
+    "$EXPORT_DIR/ExportSettings.kt" \
+    "$EXPORT_DIR/ExportNaming.kt" \
+    "$EXPORT_DIR/ExportTiling.kt" \
+    "$EXPORT_DIR/ExportGate.kt" \
+    "$EXPORT_DIR/ExportDecision.kt" \
+    "$M3_TESTS" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/m3-tests.jar"
+
+printf 'Running M3 export tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/m3-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/CropGeometry.kt" \
+    "$EDIT_DIR/ComparisonMode.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/EditStateCodec.kt" \
+    "$EDIT_DIR/EditingState.kt" \
+    "$EXPORT_DIR/ExportSettings.kt" \
+    "$EXPORT_DIR/ExportOptions.kt" \
+    "$EXPORT_DIR/ExportPlanner.kt" \
+    "$UTIL_DIR/RequestSequence.kt" \
+    "$M4_TESTS" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/m4-tests.jar"
+
+printf 'Running M4 crop, size, comparison, and state tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/m4-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/CropGeometry.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EDIT_DIR/FilterMath.kt" \
+    "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/EditStateCodec.kt" \
+    "$EDIT_DIR/EditingState.kt" \
+    "$EDIT_DIR/M5StateCodec.kt" \
+    "$EDIT_DIR/CropHandleMath.kt" \
+    "$EXPORT_DIR/ExportSettings.kt" \
+    "$EXPORT_DIR/ExportOptions.kt" \
+    "$EXPORT_DIR/ExportPlanner.kt" \
+    "$EXPORT_DIR/ExportMemoryPolicy.kt" \
+    "$ROOT/app/src/main/kotlin/com/prabhat/photocraft/preset/Preset.kt" \
+    "$M5_TESTS" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/m5-tests.jar"
+
+printf 'Running M5 filter, preset, history, crop, and memory tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/m5-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/EditingState.kt" \
+    "$EXPORT_DIR/ExportWriteGuard.kt" \
+    "$EXPORT_DIR/DestinationCleanup.kt" \
+    "$UTIL_DIR/PhotoRestore.kt" \
+    "$M5_1_TESTS" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/m5_1-tests.jar"
+
+printf 'Running M5.1 export safety, restore, and redo tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/m5_1-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EXPORT_DIR/ExportOptions.kt" \
+    "$EXPORT_DIR/ExportPlanner.kt" \
+    "$EXPORT_DIR/ExportMemoryPolicy.kt" \
+    "$EXPORT_DIR/ExportWriteGuard.kt" \
+    "$M5_2_TESTS" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/m5_2-tests.jar"
+
+printf 'Running M5.2 uncapped export, crop, and cancellation tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/m5_2-tests.jar"

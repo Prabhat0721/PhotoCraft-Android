@@ -1,0 +1,26 @@
+PhotoCraft M5.6 Patch Plan
+
+1. Filter panel me "Effects" section add hoga.
+   - Sharpness
+   - Texture
+   - Details
+   - Noise Reduction
+   - Vignette
+
+2. Uske niche "Color Grading" section add hoga.
+   - Balance
+   - Blending
+   - Shadows
+   - Midtones
+   - Highlights
+   - HSL colors
+
+3. MainActivity me:
+   - naye View bindings
+   - setupEffectsControls()
+   - setupColorGradingControls()
+   - applyEffectsControlsFromState()
+   - applyColorGradingControlsFromState()
+   - history refresh me effects + color grading render trigger
+
+4. sign.sh me M5.6 milestone allow hoga.

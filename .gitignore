@@ -1,0 +1,12 @@
+.gradle/
+.idea/
+build/
+keystore/
+tools/android.jar
+tmp/
+*.iml
+*.apk
+*.jks
+*.keystore
+local.properties
+captures/
