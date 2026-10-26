@@ -30,4 +30,4 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-}
+}.
