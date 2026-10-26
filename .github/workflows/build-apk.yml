@@ -1,53 +1,57 @@
 name: Build PhotoCraft APK
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
+workflow_dispatch:
+push:
+branches: [main]
 
 permissions:
-  contents: read
+contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+build:
+runs-on: ubuntu-24.04
+steps:
+- name: Checkout source
+uses: actions/checkout@v4
 
-      - name: Install Java and build tools
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+  - name: Install Java
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: '17'
 
-      - name: Install Android SDK tools
-        uses: android-actions/setup-android@v3
+  - name: Setup Android SDK
+    uses: android-actions/setup-android@v3
+    with:
+      packages: |
+        platform-tools
+        platforms;android-35
+        build-tools;35.0.0
 
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zip unzip
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
+  - name: Install build dependencies
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y zip unzip
+      echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
 
-      - name: Install Kotlin compiler
-        run: |
-          KOTLIN_VERSION=2.1.20
-          curl -fL "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" -o /tmp/kotlin.zip
-          mkdir -p "$HOME/kotlinc"
-          unzip -q /tmp/kotlin.zip -d "$HOME/kotlinc"
-          echo "$HOME/kotlinc/kotlinc/bin" >> "$GITHUB_PATH"
+  - name: Install Kotlin compiler
+    run: |
+      KOTLIN_VERSION=2.1.20
+      curl -fL "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" -o /tmp/kotlin.zip
+      mkdir -p "$HOME/kotlinc"
+      unzip -q /tmp/kotlin.zip -d "$HOME/kotlinc"
+      echo "$HOME/kotlinc/kotlinc/bin" >> "$GITHUB_PATH"
 
-      - name: Run project tests
-        run: bash scripts/test.sh
+  - name: Run project tests
+    run: bash scripts/test.sh
 
-      - name: Build unsigned APK
-        run: bash scripts/build.sh M5.5
+  - name: Build unsigned APK
+    run: bash scripts/build.sh M5.5
 
-      - name: Upload unsigned APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PhotoCraft-unsigned-APK
-          path: build/PhotoCraft-M5.5-unsigned.apk
-          if-no-files-found: error
+  - name: Upload unsigned APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: PhotoCraft-unsigned-APK
+      path: build/PhotoCraft-M5.5-unsigned.apk
+      if-no-files-found: error
