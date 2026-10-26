@@ -15,6 +15,12 @@ android {
         versionName = "0.7.0-m5.3"
     }
 
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
