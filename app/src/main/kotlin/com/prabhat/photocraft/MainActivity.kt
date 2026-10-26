@@ -40,6 +40,12 @@ import com.prabhat.photocraft.edit.EditStateCodec
 import com.prabhat.photocraft.edit.EditingState
 import com.prabhat.photocraft.edit.Filter
 import com.prabhat.photocraft.edit.FilterSettings
+import com.prabhat.photocraft.edit.HslColor
+import com.prabhat.photocraft.edit.HslAdjustment
+import com.prabhat.photocraft.edit.HslSettings
+import com.prabhat.photocraft.edit.ToneGrade
+import com.prabhat.photocraft.edit.ColorGradingSettings
+import com.prabhat.photocraft.edit.PhotoEffects
 import com.prabhat.photocraft.edit.M5StateCodec
 import com.prabhat.photocraft.export.DestinationAttestation
 import com.prabhat.photocraft.export.DestinationCreation
@@ -133,6 +139,12 @@ class MainActivity : Activity() {
     private lateinit var exportCancelButton: Button
     private lateinit var lightControls: LinearLayout
     private lateinit var colorControls: LinearLayout
+    private lateinit var hslControls: LinearLayout
+    private lateinit var gradingControls: LinearLayout
+    private lateinit var effectsControls: LinearLayout
+    private val advancedSeekBars = LinkedHashMap<String, SeekBar>()
+    private val advancedLabels = LinkedHashMap<String, TextView>()
+    private val advancedLabelTitles = LinkedHashMap<String, String>()
     private lateinit var errorPanel: View
     private lateinit var errorText: TextView
     private lateinit var errorRetryButton: Button
@@ -187,6 +199,7 @@ class MainActivity : Activity() {
         setupSpinners()
         setupCropControls()
         setupFilterControls()
+        setupAdvancedControls()
         setupPresetControls()
         setupCropGesture()
         wireControls()
@@ -299,6 +312,9 @@ class MainActivity : Activity() {
         exportCancelButton = findViewById(R.id.exportCancelButton)
         lightControls = findViewById(R.id.lightControls)
         colorControls = findViewById(R.id.colorControls)
+        hslControls = findViewById(R.id.hslControls)
+        gradingControls = findViewById(R.id.gradingControls)
+        effectsControls = findViewById(R.id.effectsControls)
         errorPanel = findViewById(R.id.errorPanel)
         errorText = findViewById(R.id.errorText)
         errorRetryButton = findViewById(R.id.errorRetryButton)
@@ -495,6 +511,275 @@ class MainActivity : Activity() {
         cropHorizontalSeekBar.setOnSeekBarChangeListener(seekListener)
         cropVerticalSeekBar.setOnSeekBarChangeListener(seekListener)
         applyCropControlsFromState()
+    }
+
+
+    private enum class GradeRegion { SHADOWS, MIDTONES, HIGHLIGHTS }
+
+    private fun setupAdvancedControls() {
+        hslControls.removeAllViews()
+        gradingControls.removeAllViews()
+        effectsControls.removeAllViews()
+        advancedSeekBars.clear()
+        advancedLabels.clear()
+        advancedLabelTitles.clear()
+
+        for (color in HslColor.entries) {
+            val title = color.name.lowercase().replaceFirstChar { it.uppercase() }
+            addAdvancedSlider(
+                hslControls, "hsl_${color.name}_hue", "$title · Hue",
+                -180, 180, editingState.state.colorGrading.hsl.adjustment(color).hue
+            ) { value ->
+                val state = editingState.state.colorGrading
+                val old = state.hsl.adjustment(color)
+                updateColorGrading(state.copy(
+                    hsl = replaceHsl(state.hsl, color, old.copy(hue = value))
+                ))
+            }
+            addAdvancedSlider(
+                hslControls, "hsl_${color.name}_sat", "$title · Saturation",
+                -100, 100, editingState.state.colorGrading.hsl.adjustment(color).saturation
+            ) { value ->
+                val state = editingState.state.colorGrading
+                val old = state.hsl.adjustment(color)
+                updateColorGrading(state.copy(
+                    hsl = replaceHsl(state.hsl, color, old.copy(saturation = value))
+                ))
+            }
+            addAdvancedSlider(
+                hslControls, "hsl_${color.name}_lum", "$title · Luminance",
+                -100, 100, editingState.state.colorGrading.hsl.adjustment(color).luminance
+            ) { value ->
+                val state = editingState.state.colorGrading
+                val old = state.hsl.adjustment(color)
+                updateColorGrading(state.copy(
+                    hsl = replaceHsl(state.hsl, color, old.copy(luminance = value))
+                ))
+            }
+        }
+
+        for (region in GradeRegion.entries) {
+            val initial = gradeFor(editingState.state.colorGrading, region)
+            val title = region.name.lowercase().replaceFirstChar { it.uppercase() }
+            addAdvancedSlider(
+                gradingControls, "grade_${region.name}_hue", "$title · Hue",
+                -180, 180, initial.hue
+            ) { value ->
+                val state = editingState.state.colorGrading
+                updateColorGrading(withGrade(state, region, gradeFor(state, region).copy(hue = value)))
+            }
+            addAdvancedSlider(
+                gradingControls, "grade_${region.name}_amount", "$title · Amount",
+                0, 100, initial.amount
+            ) { value ->
+                val state = editingState.state.colorGrading
+                updateColorGrading(withGrade(state, region, gradeFor(state, region).copy(amount = value)))
+            }
+            addAdvancedSlider(
+                gradingControls, "grade_${region.name}_lum", "$title · Luminance",
+                -100, 100, initial.luminance
+            ) { value ->
+                val state = editingState.state.colorGrading
+                updateColorGrading(withGrade(state, region, gradeFor(state, region).copy(luminance = value)))
+            }
+        }
+
+        addAdvancedSlider(
+            gradingControls, "grade_balance", "Balance",
+            -100, 100, editingState.state.colorGrading.balance
+        ) { value ->
+            updateColorGrading(editingState.state.colorGrading.copy(balance = value))
+        }
+        addAdvancedSlider(
+            gradingControls, "grade_blending", "Blending",
+            0, 100, editingState.state.colorGrading.blending
+        ) { value ->
+            updateColorGrading(editingState.state.colorGrading.copy(blending = value))
+        }
+
+        addAdvancedSlider(
+            effectsControls, "effect_texture", "Texture",
+            -100, 100, editingState.state.effects.texture
+        ) { value ->
+            updateEffects(editingState.state.effects.copy(texture = value))
+        }
+        addAdvancedSlider(
+            effectsControls, "effect_sharpness", "Sharpness",
+            -100, 100, editingState.state.effects.sharpness
+        ) { value ->
+            updateEffects(editingState.state.effects.copy(sharpness = value))
+        }
+        addAdvancedSlider(
+            effectsControls, "effect_details", "Details",
+            -100, 100, editingState.state.effects.details
+        ) { value ->
+            updateEffects(editingState.state.effects.copy(details = value))
+        }
+        addAdvancedSlider(
+            effectsControls, "effect_vignette", "Vignette",
+            -100, 100, editingState.state.effects.vignette
+        ) { value ->
+            updateEffects(editingState.state.effects.copy(vignette = value))
+        }
+        addAdvancedSlider(
+            effectsControls, "effect_noise", "Noise Reduction",
+            -100, 100, editingState.state.effects.noiseReduction
+        ) { value ->
+            updateEffects(editingState.state.effects.copy(noiseReduction = value))
+        }
+
+        applyAdvancedControlsFromState()
+    }
+
+    private fun addAdvancedSlider(
+        container: LinearLayout,
+        key: String,
+        title: String,
+        minimum: Int,
+        maximum: Int,
+        initialValue: Int,
+        onValueChanged: (Int) -> Unit
+    ) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(5), 0, dp(5))
+        }
+        val label = TextView(this).apply {
+            textSize = 13f
+            setTextColor(getColor(R.color.text_secondary))
+        }
+        val seekBar = SeekBar(this).apply {
+            this.max = maximum - minimum
+            progress = (initialValue - minimum).coerceIn(0, maximum - minimum)
+            contentDescription = title
+        }
+        advancedSeekBars[key] = seekBar
+        advancedLabels[key] = label
+        advancedLabelTitles[key] = title
+        row.addView(label, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        row.addView(seekBar, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        container.addView(row, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
+        fun currentValue(): Int = seekBar.progress + minimum
+        fun showValue(value: Int) {
+            label.text = "$title: $value"
+        }
+        showValue(initialValue)
+
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val value = progress + minimum
+                showValue(value)
+                if (fromUser && canEditPhoto()) {
+                    onValueChanged(value)
+                }
+            }
+
+            override fun onStartTrackingTouch(bar: SeekBar?) {
+                if (canEditPhoto()) {
+                    editingState.beginGesture()
+                    clearExportStatus()
+                }
+            }
+
+            override fun onStopTrackingTouch(bar: SeekBar?) {
+                if (canEditPhoto()) {
+                    editingState.endGesture()
+                    refreshHistory()
+                    syncUiState()
+                }
+            }
+        })
+    }
+
+    private fun replaceHsl(
+        settings: HslSettings,
+        color: HslColor,
+        adjustment: HslAdjustment
+    ): HslSettings = when (color) {
+        HslColor.RED -> settings.copy(red = adjustment)
+        HslColor.ORANGE -> settings.copy(orange = adjustment)
+        HslColor.YELLOW -> settings.copy(yellow = adjustment)
+        HslColor.GREEN -> settings.copy(green = adjustment)
+        HslColor.CYAN -> settings.copy(cyan = adjustment)
+        HslColor.BLUE -> settings.copy(blue = adjustment)
+        HslColor.PURPLE -> settings.copy(purple = adjustment)
+        HslColor.MAGENTA -> settings.copy(magenta = adjustment)
+    }
+
+    private fun gradeFor(settings: ColorGradingSettings, region: GradeRegion): ToneGrade =
+        when (region) {
+            GradeRegion.SHADOWS -> settings.shadows
+            GradeRegion.MIDTONES -> settings.midtones
+            GradeRegion.HIGHLIGHTS -> settings.highlights
+        }
+
+    private fun withGrade(
+        settings: ColorGradingSettings,
+        region: GradeRegion,
+        grade: ToneGrade
+    ): ColorGradingSettings = when (region) {
+        GradeRegion.SHADOWS -> settings.copy(shadows = grade)
+        GradeRegion.MIDTONES -> settings.copy(midtones = grade)
+        GradeRegion.HIGHLIGHTS -> settings.copy(highlights = grade)
+    }
+
+    private fun updateColorGrading(settings: ColorGradingSettings) {
+        if (editingState.updateColorGrading(settings, "Color Grading / HSL")) {
+            clearExportStatus()
+            requestPreviewRender()
+            syncUiState()
+        }
+    }
+
+    private fun updateEffects(effects: PhotoEffects) {
+        if (editingState.updateEffects(effects, "Photo Effects")) {
+            clearExportStatus()
+            requestPreviewRender()
+            syncUiState()
+        }
+    }
+
+    private fun applyAdvancedControlsFromState() {
+        if (!::hslControls.isInitialized) return
+        val grading = editingState.state.colorGrading
+        val effects = editingState.state.effects
+
+        fun setValue(key: String, value: Int, minimum: Int) {
+            val bar = advancedSeekBars[key] ?: return
+            val safe = (value - minimum).coerceIn(0, bar.max)
+            if (bar.progress != safe) bar.progress = safe
+            advancedLabels[key]?.text = "${advancedLabelTitles[key] ?: key}: $value"
+        }
+
+        for (color in HslColor.entries) {
+            val adjustment = grading.hsl.adjustment(color)
+            setValue("hsl_${color.name}_hue", adjustment.hue, -180)
+            setValue("hsl_${color.name}_sat", adjustment.saturation, -100)
+            setValue("hsl_${color.name}_lum", adjustment.luminance, -100)
+        }
+        for (region in GradeRegion.entries) {
+            val grade = gradeFor(grading, region)
+            setValue("grade_${region.name}_hue", grade.hue, -180)
+            setValue("grade_${region.name}_amount", grade.amount, 0)
+            setValue("grade_${region.name}_lum", grade.luminance, -100)
+        }
+        setValue("grade_balance", grading.balance, -100)
+        setValue("grade_blending", grading.blending, 0)
+        setValue("effect_texture", effects.texture, -100)
+        setValue("effect_sharpness", effects.sharpness, -100)
+        setValue("effect_details", effects.details, -100)
+        setValue("effect_vignette", effects.vignette, -100)
+        setValue("effect_noise", effects.noiseReduction, -100)
     }
 
     private fun setupFilterControls() {
@@ -764,6 +1049,7 @@ class MainActivity : Activity() {
         } finally {
             suppressFilterEvents = false
         }
+            applyAdvancedControlsFromState()
     }
 
     private fun updateFilterFeedback() {

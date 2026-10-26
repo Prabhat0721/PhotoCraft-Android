@@ -24,23 +24,21 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: ''
 
       - name: Install Android SDK packages
         run: |
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Install Gradle
         run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.9-bin.zip -O /tmp/gradle.zip
+          wget -q https://services.gradle.org/distributions/gradle-8.11.1-bin.zip -O /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d "$HOME"
-          echo "$HOME/gradle-8.9/bin" >> "$GITHUB_PATH"
+          echo "$HOME/gradle-8.11.1/bin" >> "$GITHUB_PATH"
 
       - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
+        run: gradle :app:assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
