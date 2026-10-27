@@ -6,7 +6,8 @@ data class EditState(
     val cropRatio: CropRatio = CropRatio.FREE,
     val filter: FilterSettings = FilterSettings.NEUTRAL,
     val effects: PhotoEffects = PhotoEffects.NEUTRAL,
-    val colorGrading: ColorGradingSettings = ColorGradingSettings.NEUTRAL
+    val colorGrading: ColorGradingSettings = ColorGradingSettings.NEUTRAL,
+    val masking: MaskingState = MaskingState()
 ) {
     fun isNeutral(): Boolean =
         adjustments.isNeutral() &&
@@ -14,5 +15,6 @@ data class EditState(
             cropRatio == CropRatio.FREE &&
             filter.isNeutral() &&
             effects.isNeutral() &&
-            colorGrading.isNeutral()
+            colorGrading.isNeutral() &&
+            masking.isNeutral()
 }
