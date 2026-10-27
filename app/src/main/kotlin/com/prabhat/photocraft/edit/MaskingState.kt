@@ -70,6 +70,7 @@ data class MaskSelection(
 
 data class MaskLayer(
     val type: MaskType,
+    val selection: MaskSelection? = null,
     val enabled: Boolean = true,
     val inverted: Boolean = false,
     val adjustments: LocalMaskAdjustments = LocalMaskAdjustments()
