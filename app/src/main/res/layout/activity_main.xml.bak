@@ -1,0 +1,1111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/appRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_shell">
+
+    <LinearLayout
+        android:id="@+id/mainColumn"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/topBar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
+
+            <ImageButton
+                android:id="@+id/changePhotoButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/change_photo"
+                android:padding="11dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_gallery"
+                android:tint="@color/action_text"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/topTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="@string/app_name"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
+
+            <ImageButton
+                android:id="@+id/undoButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/undo"
+                android:enabled="false"
+                android:padding="11dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_undo"
+                android:tint="@color/action_text"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/redoButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/redo"
+                android:enabled="false"
+                android:padding="11dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_redo"
+                android:tint="@color/action_text"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/overflowButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/more_options"
+                android:enabled="false"
+                android:padding="11dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_more"
+                android:tint="@color/action_text"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider" />
+
+        <FrameLayout
+            android:id="@+id/workspace"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <ScrollView
+                android:id="@+id/emptyState"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:fillViewport="true"
+                android:overScrollMode="never"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingStart="28dp"
+                    android:paddingTop="24dp"
+                    android:paddingEnd="28dp"
+                    android:paddingBottom="24dp">
+
+                    <FrameLayout
+                        android:layout_width="112dp"
+                        android:layout_height="112dp"
+                        android:background="@drawable/bg_empty_art">
+
+                        <ImageView
+                            android:layout_width="72dp"
+                            android:layout_height="72dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_mark" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center"
+                        android:text="@string/empty_title"
+                        android:textColor="@color/text_primary"
+                        android:textSize="26sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:fontFamily="sans-serif"
+                        android:gravity="center"
+                        android:lineSpacingMultiplier="1.2"
+                        android:text="@string/empty_body"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+
+                    <Button
+                        android:id="@+id/openPhotoButton"
+                        style="@style/PhotoCraftButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:layout_marginTop="28dp"
+                        android:text="@string/open_photo" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:fontFamily="sans-serif"
+                        android:gravity="center"
+                        android:text="@string/empty_hint"
+                        android:textColor="@color/text_muted"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </ScrollView>
+
+            <LinearLayout
+                android:id="@+id/editorPanel"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <com.prabhat.photocraft.ui.AdaptivePreviewLayout
+                    android:id="@+id/previewCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="12dp"
+                    android:background="@drawable/bg_preview_card"
+                    android:clipToOutline="true">
+
+                    <com.prabhat.photocraft.ui.CropPreviewView
+                        android:id="@+id/previewImage"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/preview_content_description"
+                        android:importantForAccessibility="yes" />
+
+                    <com.prabhat.photocraft.ui.CropOverlayView
+                        android:id="@+id/cropOverlay"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:importantForAccessibility="no"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:background="@drawable/bg_preview_meta_scrim"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="12dp"
+                        android:paddingTop="18dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="10dp">
+
+                        <TextView
+                            android:id="@+id/previewMeta"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:accessibilityLiveRegion="polite"
+                            android:ellipsize="middle"
+                            android:fontFamily="sans-serif"
+                            android:maxLines="1"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/editedBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_badge"
+                            android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.08"
+                            android:paddingStart="7dp"
+                            android:paddingTop="3dp"
+                            android:paddingEnd="7dp"
+                            android:paddingBottom="3dp"
+                            android:text="@string/edited_badge"
+                            android:textColor="@color/accent"
+                            android:textSize="8sp"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+
+                        <ProgressBar
+                            android:id="@+id/renderIndicator"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_marginStart="8dp"
+                            android:contentDescription="@string/updating_preview"
+                            android:indeterminateTint="@color/accent"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <ImageButton
+                        android:id="@+id/compareButton"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_gravity="top|end"
+                        android:layout_margin="10dp"
+                        android:background="@drawable/bg_compare_hold"
+                        android:contentDescription="@string/compare_hold_description"
+                        android:padding="9dp"
+                        android:scaleType="centerInside"
+                        android:src="@drawable/ic_compare_hold"
+                        android:tint="@color/text_primary"
+                        android:visibility="gone" />
+
+                    <FrameLayout
+                        android:id="@+id/loadOverlay"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@color/preview_scrim"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+                            <ProgressBar
+                                android:layout_width="36dp"
+                                android:layout_height="36dp"
+                                android:contentDescription="@string/loading_photo"
+                                android:indeterminateTint="@color/accent" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:fontFamily="sans-serif-medium"
+                                android:text="@string/loading_photo"
+                                android:textColor="@color/text_primary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+                    </FrameLayout>
+                </com.prabhat.photocraft.ui.AdaptivePreviewLayout>
+
+                <ScrollView
+                    android:id="@+id/root"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:fillViewport="false"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/controlsContent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingStart="20dp"
+                        android:paddingTop="12dp"
+                        android:paddingEnd="20dp"
+                        android:paddingBottom="28dp">
+
+                        <LinearLayout
+                            android:id="@+id/lightPanel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <TextView
+                                style="@style/PhotoCraftSectionLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:accessibilityHeading="true"
+                                android:text="@string/light_title" />
+
+                            <LinearLayout
+                                android:id="@+id/lightControls"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:orientation="vertical" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/colorPanel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <TextView
+                                style="@style/PhotoCraftSectionLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:accessibilityHeading="true"
+                                android:text="@string/color_title" />
+
+                            <LinearLayout
+                                android:id="@+id/colorControls"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:orientation="vertical" />
+
+                            <TextView
+                                style="@style/PhotoCraftSectionLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="18dp"
+                                android:accessibilityHeading="true"
+                                android:text="HSL Color Mixer" />
+
+                            <LinearLayout
+                                android:id="@+id/hslControls"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical" />
+
+                            <TextView
+                                style="@style/PhotoCraftSectionLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="18dp"
+                                android:accessibilityHeading="true"
+                                android:text="Color Grading" />
+
+                            <LinearLayout
+                                android:id="@+id/gradingControls"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/maskingPanel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <TextView
+                                style="@style/PhotoCraftSectionLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:accessibilityHeading="true"
+                                android:text="Masking" />
+
+                            <TextView
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:text="Local Subject and Background editing will be configured here. Selection and brush tools are not active yet." />
+                        
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:orientation="horizontal">
+
+                                <Button
+                                    android:id="@+id/maskSubjectButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Subject" />
+
+                                <Button
+                                    android:id="@+id/maskBackgroundButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Background" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+
+                                <Button
+                                    android:id="@+id/maskBrushButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Brush" />
+
+                                <Button
+                                    android:id="@+id/maskEraserButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Eraser" />
+
+                                <Button
+                                    android:id="@+id/maskInvertButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Invert" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/maskStatusText"
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="Select a mask to begin." />
+</LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/filterPanel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <TextView
+                                style="@style/PhotoCraftSectionLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:accessibilityHeading="true"
+                                android:text="@string/filter_title" />
+
+                            <TextView
+                                style="@style/PhotoCraftSectionLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="14dp"
+                                android:accessibilityHeading="true"
+                                android:text="Effects" />
+
+                            <LinearLayout
+                                android:id="@+id/effectsControls"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical" />
+
+                            <TextView
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="14dp"
+                                android:text="@string/filter_style_label" />
+
+                            <Spinner
+                                android:id="@+id/filterSpinner"
+                                style="@style/PhotoCraftSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:layout_marginTop="6dp"
+                                android:contentDescription="@string/filter_style_label"
+                                android:spinnerMode="dropdown" />
+
+                            <TextView
+                                android:id="@+id/filterSummary"
+                                style="@style/PhotoCraftFieldValue"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:accessibilityLiveRegion="polite" />
+
+                            <TextView
+                                android:id="@+id/filterIntensityLabel"
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:text="@string/filter_intensity_label" />
+
+                            <SeekBar
+                                android:id="@+id/filterIntensitySeekBar"
+                                style="@style/PhotoCraftSeekBar"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:contentDescription="@string/filter_intensity_label"
+                                android:max="100"
+                                android:progress="100" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/cropPanel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <TextView
+                                style="@style/PhotoCraftSectionLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:accessibilityHeading="true"
+                                android:text="@string/crop_title" />
+
+                            <TextView
+                                android:id="@+id/cropDragHint"
+                                style="@style/PhotoCraftFieldValue"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:text="@string/crop_drag_hint" />
+
+                            <TextView
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="14dp"
+                                android:text="@string/crop_ratio_label" />
+
+                            <Spinner
+                                android:id="@+id/cropRatioSpinner"
+                                style="@style/PhotoCraftSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:layout_marginTop="6dp"
+                                android:contentDescription="@string/crop_ratio_label"
+                                android:spinnerMode="dropdown" />
+
+                            <TextView
+                                android:id="@+id/cropSummary"
+                                style="@style/PhotoCraftFieldValue"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:accessibilityLiveRegion="polite" />
+
+                            <TextView
+                                android:id="@+id/cropWidthLabel"
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:text="@string/crop_width_label" />
+
+                            <SeekBar
+                                android:id="@+id/cropWidthSeekBar"
+                                style="@style/PhotoCraftSeekBar"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:contentDescription="@string/crop_width_label"
+                                android:max="1000"
+                                android:progress="1000" />
+
+                            <TextView
+                                android:id="@+id/cropHeightLabel"
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="@string/crop_height_label" />
+
+                            <SeekBar
+                                android:id="@+id/cropHeightSeekBar"
+                                style="@style/PhotoCraftSeekBar"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:contentDescription="@string/crop_height_label"
+                                android:max="1000"
+                                android:progress="1000" />
+
+                            <TextView
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="@string/crop_horizontal_label" />
+
+                            <SeekBar
+                                android:id="@+id/cropHorizontalSeekBar"
+                                style="@style/PhotoCraftSeekBar"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:contentDescription="@string/crop_horizontal_label"
+                                android:max="1000"
+                                android:progress="500" />
+
+                            <TextView
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="@string/crop_vertical_label" />
+
+                            <SeekBar
+                                android:id="@+id/cropVerticalSeekBar"
+                                style="@style/PhotoCraftSeekBar"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:contentDescription="@string/crop_vertical_label"
+                                android:max="1000"
+                                android:progress="500" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </ScrollView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/errorPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_error_panel"
+                android:elevation="12dp"
+                android:orientation="vertical"
+                android:padding="14dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/errorText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:accessibilityLiveRegion="polite"
+                    android:fontFamily="sans-serif"
+                    android:lineSpacingMultiplier="1.15"
+                    android:textColor="@color/error"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/errorRetryButton"
+                    style="@style/PhotoCraftButtonSecondary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_gravity="end"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/retry" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/editorToolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/surface"
+            android:elevation="8dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <RadioGroup
+                android:id="@+id/categoryGroup"
+                android:layout_width="match_parent"
+                android:layout_height="68dp"
+                android:orientation="horizontal"
+                android:paddingStart="8dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="6dp">
+
+                <RadioButton
+                    android:id="@+id/lightCategory"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_category_option"
+                    android:button="@null"
+                    android:checked="true"
+                    android:drawableTop="@drawable/ic_light"
+                    android:drawablePadding="3dp"
+                    android:drawableTint="@color/compare_option_text"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:text="@string/category_light"
+                    android:textAllCaps="false"
+                    android:textColor="@color/compare_option_text"
+                    android:textSize="10sp" />
+
+                <RadioButton
+                    android:id="@+id/colorCategory"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_category_option"
+                    android:button="@null"
+                    android:drawableTop="@drawable/ic_color"
+                    android:drawablePadding="3dp"
+                    android:drawableTint="@color/compare_option_text"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:text="@string/category_color"
+                    android:textAllCaps="false"
+                    android:textColor="@color/compare_option_text"
+                    android:textSize="10sp" />
+
+                <RadioButton
+                    android:id="@+id/effectsCategory"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_category_option"
+                    android:button="@null"
+                    android:drawableTop="@drawable/ic_effects"
+                    android:drawablePadding="3dp"
+                    android:drawableTint="@color/compare_option_text"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:text="@string/category_effects"
+                    android:textAllCaps="false"
+                    android:textColor="@color/compare_option_text"
+                    android:textSize="10sp" />
+
+                <RadioButton
+                    android:id="@+id/maskingCategory"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_category_option"
+                    android:button="@null"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:text="Masking"
+                    android:textAllCaps="false"
+                    android:textColor="@color/compare_option_text"
+                    android:textSize="10sp" android:drawableTop="@drawable/ic_masking"
+                    android:drawablePadding="3dp"
+                    android:drawableTint="@color/compare_option_text"
+                    />
+
+                <RadioButton
+                    android:id="@+id/cropCategory"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_category_option"
+                    android:button="@null"
+                    android:drawableTop="@drawable/ic_crop"
+                    android:drawablePadding="3dp"
+                    android:drawableTint="@color/compare_option_text"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:text="@string/category_crop"
+                    android:textAllCaps="false"
+                    android:textColor="@color/compare_option_text"
+                    android:textSize="10sp" />
+            </RadioGroup>
+        </LinearLayout>
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/actionSheetOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/background"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp">
+
+                <TextView
+                    android:id="@+id/actionSheetTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-medium"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp" />
+
+                <ImageButton
+                    android:id="@+id/actionSheetCloseButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/close"
+                    android:padding="11dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_close"
+                    android:tint="@color/action_text" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <ScrollView
+                android:id="@+id/actionSheetScroll"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:overScrollMode="never"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="20dp"
+                    android:paddingTop="18dp"
+                    android:paddingEnd="20dp"
+                    android:paddingBottom="32dp">
+
+                    <LinearLayout
+                        android:id="@+id/presetPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            style="@style/PhotoCraftFieldValue"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/preset_subtitle" />
+
+                        <TextView
+                            style="@style/PhotoCraftFieldLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="18dp"
+                            android:text="@string/preset_saved_label" />
+
+                        <Spinner
+                            android:id="@+id/presetSpinner"
+                            style="@style/PhotoCraftSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="6dp"
+                            android:contentDescription="@string/preset_saved_label"
+                            android:spinnerMode="dropdown" />
+
+                        <EditText
+                            android:id="@+id/presetNameInput"
+                            style="@style/PhotoCraftInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="12dp"
+                            android:hint="@string/preset_name_hint"
+                            android:imeOptions="actionDone"
+                            android:inputType="textCapSentences"
+                            android:maxLength="40"
+                            android:maxLines="1" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/savePresetButton"
+                                style="@style/PhotoCraftButtonSecondary"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_marginEnd="6dp"
+                                android:layout_weight="1"
+                                android:text="@string/preset_save" />
+
+                            <Button
+                                android:id="@+id/applyPresetButton"
+                                style="@style/PhotoCraftButtonSecondary"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_marginEnd="6dp"
+                                android:layout_weight="1"
+                                android:text="@string/preset_apply" />
+
+                            <Button
+                                android:id="@+id/deletePresetButton"
+                                style="@style/PhotoCraftButtonSecondary"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_weight="1"
+                                android:text="@string/preset_delete" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/presetStatus"
+                            style="@style/PhotoCraftFieldValue"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:accessibilityLiveRegion="polite" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/historyPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            style="@style/PhotoCraftFieldValue"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/history_subtitle" />
+
+                        <LinearLayout
+                            android:id="@+id/historyList"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:orientation="vertical" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/exportPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            style="@style/PhotoCraftFieldValue"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/export_sheet_subtitle" />
+
+                        <TextView
+                            style="@style/PhotoCraftFieldLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="18dp"
+                            android:text="@string/quality_label" />
+
+                        <Spinner
+                            android:id="@+id/qualitySpinner"
+                            style="@style/PhotoCraftSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="6dp"
+                            android:contentDescription="@string/quality_label"
+                            android:spinnerMode="dropdown" />
+
+                        <TextView
+                            style="@style/PhotoCraftFieldLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="@string/output_size_label" />
+
+                        <Spinner
+                            android:id="@+id/sizeSpinner"
+                            style="@style/PhotoCraftSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="6dp"
+                            android:contentDescription="@string/output_size_label"
+                            android:spinnerMode="dropdown" />
+
+                        <TextView
+                            android:id="@+id/outputSummary"
+                            style="@style/PhotoCraftFieldValue"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:accessibilityLiveRegion="polite" />
+
+                        <Button
+                            android:id="@+id/exportButton"
+                            style="@style/PhotoCraftButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="50dp"
+                            android:layout_marginTop="18dp"
+                            android:enabled="false"
+                            android:text="@string/export_jpeg" />
+
+                        <LinearLayout
+                            android:id="@+id/exportStatusRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:visibility="gone">
+
+                            <ProgressBar
+                                android:id="@+id/exportProgress"
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:contentDescription="@string/exporting"
+                                android:indeterminateTint="@color/accent"
+                                android:visibility="gone" />
+
+                            <TextView
+                                android:id="@+id/exportStatus"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="10dp"
+                                android:layout_weight="1"
+                                android:accessibilityLiveRegion="polite"
+                                android:fontFamily="sans-serif"
+                                android:lineSpacingMultiplier="1.15"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/exportCancelButton"
+                            style="@style/PhotoCraftButtonSecondary"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/export_cancel"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </LinearLayout>
+            </ScrollView>
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>
