@@ -30,6 +30,10 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.prabhat.photocraft.edit.SelfieMaskSegmenter
 import com.prabhat.photocraft.edit.Adjustment
 import com.prabhat.photocraft.edit.AdjustmentGroup
 import com.prabhat.photocraft.edit.Adjustments
@@ -164,6 +168,7 @@ class MainActivity : Activity() {
     private var suppressFilterEvents = false
     private var lastHistoryRevision = -1
     private var sourceBitmap: Bitmap? = null
+    private val selfieMaskSegmenter = SelfieMaskSegmenter()
     private var adjustedBitmap: Bitmap? = null
     private var currentDisplayName: String? = null
     private var selectedUri: Uri? = null
@@ -1171,26 +1176,74 @@ class MainActivity : Activity() {
             )
         }
 
+        fun autoSelectMask(type: com.prabhat.photocraft.edit.MaskType) {
+            val bitmap = sourceBitmap
+            if (bitmap == null) {
+                statusText.text = "Open a photo first"
+                return
+            }
+
+            val current = editingState.state.masking
+            val existingSubject = current.subject.selection
+
+            fun applySubjectMask(subject: com.prabhat.photocraft.edit.MaskSelection) {
+                val inverse = ByteArray(subject.coverage.size) { i ->
+                    (255 - (subject.coverage[i].toInt() and 0xFF)).toByte()
+                }
+                val background = com.prabhat.photocraft.edit.MaskSelection(
+                    subject.width, subject.height, inverse
+                )
+                val updated = current.copy(
+                    subject = current.subject.copy(selection = subject, inverted = false),
+                    background = current.background.copy(selection = background, inverted = false),
+                    selectedMask = type
+                )
+                editingState.updateMasking(updated, "Auto Select $type")
+                refreshMaskStatus()
+                syncUiState()
+            }
+
+            if (type == com.prabhat.photocraft.edit.MaskType.BACKGROUND &&
+                existingSubject != null
+            ) {
+                applySubjectMask(existingSubject)
+                return
+            }
+
+            statusText.text = "Detecting subject..."
+            CoroutineScope(Dispatchers.Main).launch {
+                try {
+                    val detected = selfieMaskSegmenter.createMask(bitmap)
+                    val inverse = ByteArray(detected.coverage.size) { i ->
+                        (255 - (detected.coverage[i].toInt() and 0xFF)).toByte()
+                    }
+                    val background = com.prabhat.photocraft.edit.MaskSelection(
+                        detected.width, detected.height, inverse
+                    )
+                    val latest = editingState.state.masking.copy(
+                        subject = editingState.state.masking.subject.copy(
+                            selection = detected, inverted = false
+                        ),
+                        background = editingState.state.masking.background.copy(
+                            selection = background, inverted = false
+                        ),
+                        selectedMask = type
+                    )
+                    editingState.updateMasking(latest, "Auto Select $type")
+                    refreshMaskStatus()
+                    syncUiState()
+                } catch (error: Exception) {
+                    statusText.text = "Subject detection failed: ${error.message ?: "try again"}"
+                }
+            }
+        }
+
         subjectButton.setOnClickListener {
-            editingState.updateMasking(
-                editingState.state.masking.selectMask(
-                    com.prabhat.photocraft.edit.MaskType.SUBJECT
-                ),
-                "Select Subject Mask"
-            )
-            refreshMaskStatus()
-            syncUiState()
+            autoSelectMask(com.prabhat.photocraft.edit.MaskType.SUBJECT)
         }
 
         backgroundButton.setOnClickListener {
-            editingState.updateMasking(
-                editingState.state.masking.selectMask(
-                    com.prabhat.photocraft.edit.MaskType.BACKGROUND
-                ),
-                "Select Background Mask"
-            )
-            refreshMaskStatus()
-            syncUiState()
+            autoSelectMask(com.prabhat.photocraft.edit.MaskType.BACKGROUND)
         }
 
         brushButton.setOnClickListener {
