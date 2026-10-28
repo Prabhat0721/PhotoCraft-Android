@@ -124,21 +124,5 @@ data class Adjustments(
             )
         }
 
-        fun withValue(adjustment: Adjustment, value: Int): Adjustments {
-            val clamped = Adjustment.clamp(value)
-            return when (adjustment) {
-                Adjustment.EXPOSURE -> copy(exposure = clamped)
-                Adjustment.BRIGHTNESS -> copy(brightness = clamped)
-                Adjustment.CONTRAST -> copy(contrast = clamped)
-                Adjustment.HIGHLIGHTS -> copy(highlights = clamped)
-                Adjustment.SHADOWS -> copy(shadows = clamped)
-                Adjustment.WHITES -> copy(whites = clamped)
-                Adjustment.BLACKS -> copy(blacks = clamped)
-                Adjustment.TEMPERATURE -> copy(temperature = clamped)
-                Adjustment.TINT -> copy(tint = clamped)
-                Adjustment.SATURATION -> copy(saturation = clamped)
-                Adjustment.VIBRANCE -> copy(vibrance = clamped)
-            }
-        }
     }
 }

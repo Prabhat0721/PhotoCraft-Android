@@ -13,6 +13,7 @@ import com.prabhat.photocraft.edit.FilterMath
 import com.prabhat.photocraft.edit.FilterSettings
 import com.prabhat.photocraft.edit.PhotoEffects
 import com.prabhat.photocraft.edit.PhotoEffectsMath
+import com.prabhat.photocraft.edit.MaskingState
 import com.prabhat.photocraft.util.RequestSequence
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
@@ -44,6 +45,7 @@ class PreviewRenderer : Closeable {
         filter: FilterSettings,
         effects: PhotoEffects,
         colorGrading: ColorGradingSettings = ColorGradingSettings.NEUTRAL,
+        masking: MaskingState = MaskingState(),
         callback: (Result) -> Unit
     ) {
         if (closed.get()) {
@@ -56,7 +58,7 @@ class PreviewRenderer : Closeable {
                 return@post
             }
 
-            val result = render(source, adjustments, filter, effects, colorGrading)
+            val result = render(source, adjustments, filter, effects, colorGrading, masking)
 
             if (closed.get() || !requests.isCurrent(requestId)) {
                 recycleDiscarded(result, source)
@@ -78,10 +80,11 @@ class PreviewRenderer : Closeable {
         adjustments: Adjustments,
         filter: FilterSettings,
         effects: PhotoEffects,
-        colorGrading: ColorGradingSettings
+        colorGrading: ColorGradingSettings,
+        masking: MaskingState
     ): Result {
         if (adjustments.isNeutral() && filter.isNeutral() && effects.isNeutral() &&
-            colorGrading.isNeutral()) {
+            colorGrading.isNeutral() && masking.isNeutral()) {
             return Result.Success(source)
         }
 
@@ -99,6 +102,52 @@ class PreviewRenderer : Closeable {
             FilterMath.applyInPlace(pixels, filter)
             PhotoEffectsMath.applyInPlace(pixels, width, height, effects)
             ColorGradingMath.applyInPlace(pixels, colorGrading)
+
+            // Apply each enabled local mask and blend by its coverage.
+            for (layer in listOf(masking.subject, masking.background)) {
+                if (!layer.enabled) continue
+                val selection = layer.selection ?: continue
+                val local = layer.adjustments
+
+                if (local.adjustments.isNeutral() && local.filter.isNeutral() &&
+                    local.effects.isNeutral() && local.colorGrading.isNeutral()) {
+                    continue
+                }
+
+                val edited = pixels.copyOf()
+                AdjustmentMath.applyInPlace(edited, local.adjustments)
+                FilterMath.applyInPlace(edited, local.filter)
+                PhotoEffectsMath.applyInPlace(edited, width, height, local.effects)
+                ColorGradingMath.applyInPlace(edited, local.colorGrading)
+
+                for (y in 0 until height) {
+                    val maskY = (y.toFloat() * selection.height / height)
+                        .toInt().coerceIn(0, selection.height - 1)
+                    for (x in 0 until width) {
+                        val maskX = (x.toFloat() * selection.width / width)
+                            .toInt().coerceIn(0, selection.width - 1)
+                        var coverage = selection.coverageAt(maskX, maskY)
+                        if (layer.inverted) coverage = 255 - coverage
+                        if (coverage == 0) continue
+
+                        val i = y * width + x
+                        val base = pixels[i]
+                        val changed = edited[i]
+                        val amount = coverage / 255f
+
+                        fun blend(shift: Int): Int {
+                            val before = (base shr shift) and 0xFF
+                            val after = (changed shr shift) and 0xFF
+                            return (before + (after - before) * amount)
+                                .toInt().coerceIn(0, 255)
+                        }
+
+                        pixels[i] = (base and -0x1000000) or
+                            (blend(16) shl 16) or
+                            (blend(8) shl 8) or blend(0)
+                    }
+                }
+            }
 
             output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
                 density = source.density

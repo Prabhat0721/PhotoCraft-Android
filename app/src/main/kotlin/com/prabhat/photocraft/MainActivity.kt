@@ -342,7 +342,7 @@ class MainActivity : Activity() {
                     val masking = editingState.state.masking
                     val selectedLayer = masking.selected()
                     val currentAdjustments = selectedLayer.adjustments.adjustments
-                    val updatedAdjustments = currentAdjustments.withValue(adjustment, value)
+                    val updatedAdjustments = currentAdjustments.with(adjustment, value)
                     val updatedLayer = selectedLayer.copy(
                         adjustments = selectedLayer.adjustments.copy(adjustments = updatedAdjustments)
                     )
