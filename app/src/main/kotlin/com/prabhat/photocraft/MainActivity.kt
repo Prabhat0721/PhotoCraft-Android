@@ -338,16 +338,35 @@ class MainActivity : Activity() {
 
             override fun onAdjustmentChanged(row: AdjustmentRowView, value: Int) {
                 val adjustment = row.adjustment ?: return
-                if (
-                    editingState.update(
-                        adjustment,
-                        value,
-                        getString(labelFor(adjustment))
+                if (selectedCategory == EditorCategory.MASKING) {
+                    val masking = editingState.state.masking
+                    val selectedLayer = masking.selected()
+                    val currentAdjustments = selectedLayer.adjustments.adjustments
+                    val updatedAdjustments = currentAdjustments.withValue(adjustment, value)
+                    val updatedLayer = selectedLayer.copy(
+                        adjustments = selectedLayer.adjustments.copy(adjustments = updatedAdjustments)
                     )
-                ) {
-                    clearExportStatus()
-                    requestPreviewRender()
-                    syncUiState()
+                    val updatedMasking = when (masking.selectedMask) {
+                        com.prabhat.photocraft.edit.MaskType.SUBJECT -> masking.copy(subject = updatedLayer)
+                        com.prabhat.photocraft.edit.MaskType.BACKGROUND -> masking.copy(background = updatedLayer)
+                    }
+                    if (editingState.updateMasking(updatedMasking, "Local Mask Adjustment")) {
+                        clearExportStatus()
+                        requestPreviewRender()
+                        syncUiState()
+                    }
+                } else {
+                    if (
+                        editingState.update(
+                            adjustment,
+                            value,
+                            getString(labelFor(adjustment))
+                        )
+                    ) {
+                        clearExportStatus()
+                        requestPreviewRender()
+                        syncUiState()
+                    }
                 }
             }
 
@@ -2220,7 +2239,8 @@ class MainActivity : Activity() {
 
         renderer.request(
             source, editingState.adjustments, editingState.filter,
-            editingState.state.effects, editingState.state.colorGrading
+            editingState.state.effects, editingState.state.colorGrading,
+            editingState.state.masking
         ) { result ->
             if (isDestroyed || isFinishing || sourceBitmap !== source) {
                 return@request

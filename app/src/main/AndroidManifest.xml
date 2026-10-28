@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:versionCode="9"
-    android:versionName="0.7.0-m5.3"
-    package="com.prabhat.photocraft">
+    android:versionName="0.7.0-m5.3">
 
     <uses-sdk
         android:minSdkVersion="29"

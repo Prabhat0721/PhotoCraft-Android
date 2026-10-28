@@ -32,24 +32,33 @@ data class MaskSelection(
     fun copiedCoverage(): ByteArray = coverage.copyOf()
 
     fun paint(
+        sourceWidth: Int,
+        sourceHeight: Int,
         centerX: Float,
         centerY: Float,
         radius: Float,
         flow: Int = 100,
         erase: Boolean = false
     ): MaskSelection {
+        val scaleX = width.toFloat() / sourceWidth.coerceAtLeast(1)
+        val scaleY = height.toFloat() / sourceHeight.coerceAtLeast(1)
+        
+        val mappedX = centerX * scaleX
+        val mappedY = centerY * scaleY
+        val mappedRadius = radius * maxOf(scaleX, scaleY)
+
         val output = coverage.copyOf()
-        val r = radius.coerceAtLeast(1f)
-        val left = (centerX - r).toInt().coerceAtLeast(0)
-        val right = (centerX + r).toInt().coerceAtMost(width - 1)
-        val top = (centerY - r).toInt().coerceAtLeast(0)
-        val bottom = (centerY + r).toInt().coerceAtMost(height - 1)
+        val r = mappedRadius.coerceAtLeast(1f)
+        val left = (mappedX - r).toInt().coerceAtLeast(0)
+        val right = (mappedX + r).toInt().coerceAtMost(width - 1)
+        val top = (mappedY - r).toInt().coerceAtLeast(0)
+        val bottom = (mappedY + r).toInt().coerceAtMost(height - 1)
         val amount = flow.coerceIn(0, 100) * 255 / 100
 
         for (y in top..bottom) {
             for (x in left..right) {
-                val dx = x - centerX
-                val dy = y - centerY
+                val dx = x - mappedX
+                val dy = y - mappedY
                 val distance = kotlin.math.sqrt(dx * dx + dy * dy)
                 if (distance <= r) {
                     val index = y * width + x
@@ -76,21 +85,20 @@ data class MaskLayer(
     val adjustments: LocalMaskAdjustments = LocalMaskAdjustments()
 ) {
     fun paint(
-        width: Int,
-        height: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
         x: Float,
         y: Float,
         radius: Float,
         flow: Int,
         erase: Boolean = false
     ): MaskLayer {
-        require(width > 0 && height > 0)
+        require(sourceWidth > 0 && sourceHeight > 0)
         val current = selection
-            ?.takeIf { it.width == width && it.height == height }
-            ?: MaskSelection(width, height, ByteArray(width * height))
+            ?: MaskSelection(sourceWidth, sourceHeight, ByteArray(sourceWidth * sourceHeight))
 
         return copy(
-            selection = current.paint(x, y, radius, flow, erase)
+            selection = current.paint(sourceWidth, sourceHeight, x, y, radius, flow, erase)
         )
     }
 }
@@ -110,15 +118,15 @@ data class MaskingState(
         subject.selection == null && background.selection == null
 
     fun paintSelected(
-        width: Int,
-        height: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
         x: Float,
         y: Float,
         radius: Float,
         flow: Int = 100,
         erase: Boolean = false
     ): MaskingState {
-        val updated = selected().paint(width, height, x, y, radius, flow, erase)
+        val updated = selected().paint(sourceWidth, sourceHeight, x, y, radius, flow, erase)
         return when (selectedMask) {
             MaskType.SUBJECT -> copy(subject = updated)
             MaskType.BACKGROUND -> copy(background = updated)
