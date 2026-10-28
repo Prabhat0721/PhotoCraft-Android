@@ -1153,6 +1153,122 @@ class MainActivity : Activity() {
         label.ifBlank { getString(R.string.history_original) }
 
 
+
+    private fun setupLocalMaskAdjustmentControls(
+        container: LinearLayout,
+        type: com.prabhat.photocraft.edit.MaskType
+    ) {
+        val initialMasking = editingState.state.masking
+        val initialLayer = if (type == com.prabhat.photocraft.edit.MaskType.SUBJECT) {
+            initialMasking.subject
+        } else {
+            initialMasking.background
+        }
+
+        fun addGroupTitle(title: String) {
+            container.addView(TextView(this).apply {
+                text = title
+                textSize = 12f
+                letterSpacing = 0.08f
+                setTextColor(getColor(R.color.text_secondary))
+                setPadding(0, dp(10), 0, dp(2))
+                contentDescription = title
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+        }
+
+        fun addAdjustment(adjustment: com.prabhat.photocraft.edit.Adjustment) {
+            val initial = initialLayer.adjustments.adjustments.value(adjustment)
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, dp(3), 0, dp(3))
+            }
+            val label = TextView(this).apply {
+                textSize = 13f
+                setTextColor(getColor(R.color.text_secondary))
+            }
+            val seek = SeekBar(this).apply {
+                max = 200
+                progress = initial + 100
+                contentDescription = "${type.name} ${adjustment.name}"
+            }
+
+            fun showValue(value: Int) {
+                label.text = "${adjustment.name.lowercase()
+                    .replaceFirstChar { it.uppercase() }}: $value"
+            }
+            showValue(initial)
+
+            seek.setOnSeekBarChangeListener(object :
+                SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    bar: SeekBar?, progress: Int, fromUser: Boolean
+                ) {
+                    val value = progress - 100
+                    showValue(value)
+                    if (!fromUser || !canEditPhoto()) return
+
+                    val current = editingState.state.masking
+                    val layer = if (type ==
+                        com.prabhat.photocraft.edit.MaskType.SUBJECT
+                    ) current.subject else current.background
+
+                    val updatedLayer = layer.copy(
+                        adjustments = layer.adjustments.copy(
+                            adjustments = layer.adjustments.adjustments
+                                .with(adjustment, value)
+                        )
+                    )
+                    val updated = if (type ==
+                        com.prabhat.photocraft.edit.MaskType.SUBJECT
+                    ) current.copy(subject = updatedLayer)
+                    else current.copy(background = updatedLayer)
+
+                    editingState.updateMasking(
+                        updated, "Local ${type.name} ${adjustment.name}"
+                    )
+                    clearExportStatus()
+                    syncUiState()
+                }
+
+                override fun onStartTrackingTouch(bar: SeekBar?) {
+                    if (canEditPhoto()) editingState.beginGesture()
+                }
+
+                override fun onStopTrackingTouch(bar: SeekBar?) {
+                    if (canEditPhoto()) editingState.endGesture()
+                }
+            })
+
+            row.addView(label, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            row.addView(seek, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            container.addView(row, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+        }
+
+        addGroupTitle("LIGHT")
+        com.prabhat.photocraft.edit.Adjustment.values()
+            .filter { it.group ==
+                com.prabhat.photocraft.edit.AdjustmentGroup.LIGHT }
+            .forEach { addAdjustment(it) }
+
+        addGroupTitle("COLOR")
+        com.prabhat.photocraft.edit.Adjustment.values()
+            .filter { it.group ==
+                com.prabhat.photocraft.edit.AdjustmentGroup.COLOR }
+            .forEach { addAdjustment(it) }
+    }
+
     private fun setupMaskingControls() {
         val subjectButton = findViewById<Button>(R.id.maskSubjectButton)
         val backgroundButton = findViewById<Button>(R.id.maskBackgroundButton)
@@ -1160,6 +1276,14 @@ class MainActivity : Activity() {
         val eraserButton = findViewById<Button>(R.id.maskEraserButton)
         val invertButton = findViewById<Button>(R.id.maskInvertButton)
         val statusText = findViewById<TextView>(R.id.maskStatusText)
+        setupLocalMaskAdjustmentControls(
+            findViewById(R.id.maskSubjectAdjustments),
+            com.prabhat.photocraft.edit.MaskType.SUBJECT
+        )
+        setupLocalMaskAdjustmentControls(
+            findViewById(R.id.maskBackgroundAdjustments),
+            com.prabhat.photocraft.edit.MaskType.BACKGROUND
+        )
 
         var activeTool = "Brush"
         val preview = previewImage
