@@ -75,6 +75,7 @@ class MainActivity : Activity() {
         LIGHT,
         COLOR,
         EFFECTS,
+        MASKING,
         CROP
     }
 
@@ -101,6 +102,7 @@ class MainActivity : Activity() {
     private lateinit var categoryGroup: RadioGroup
     private lateinit var lightPanel: View
     private lateinit var colorPanel: View
+    private lateinit var maskingPanel: View
     private lateinit var filterPanel: View
     private lateinit var cropPanel: View
     private lateinit var qualitySpinner: Spinner
@@ -198,6 +200,7 @@ class MainActivity : Activity() {
         buildAdjustmentRows()
         setupSpinners()
         setupCropControls()
+        setupMaskingControls()
         setupFilterControls()
         setupAdvancedControls()
         setupPresetControls()
@@ -274,6 +277,7 @@ class MainActivity : Activity() {
         categoryGroup = findViewById(R.id.categoryGroup)
         lightPanel = findViewById(R.id.lightPanel)
         colorPanel = findViewById(R.id.colorPanel)
+        maskingPanel = findViewById(R.id.maskingPanel)
         filterPanel = findViewById(R.id.filterPanel)
         cropPanel = findViewById(R.id.cropPanel)
         qualitySpinner = findViewById(R.id.qualitySpinner)
@@ -1143,6 +1147,127 @@ class MainActivity : Activity() {
     private fun historyLabel(label: String): String =
         label.ifBlank { getString(R.string.history_original) }
 
+
+    private fun setupMaskingControls() {
+        val subjectButton = findViewById<Button>(R.id.maskSubjectButton)
+        val backgroundButton = findViewById<Button>(R.id.maskBackgroundButton)
+        val brushButton = findViewById<Button>(R.id.maskBrushButton)
+        val eraserButton = findViewById<Button>(R.id.maskEraserButton)
+        val invertButton = findViewById<Button>(R.id.maskInvertButton)
+        val statusText = findViewById<TextView>(R.id.maskStatusText)
+
+        var activeTool = "Brush"
+        val preview = previewImage
+
+        fun refreshMaskStatus() {
+            val masking = editingState.state.masking
+            val layer = masking.selected()
+            statusText.text = "Mask: ${masking.selectedMask} • Tool: $activeTool • " +
+                if (layer.selection == null) "No selection yet" else "Selection ready"
+            preview.setMaskSelection(
+                if (selectedCategory == EditorCategory.MASKING && !compareHeld) {
+                    layer.selection
+                } else null
+            )
+        }
+
+        subjectButton.setOnClickListener {
+            editingState.updateMasking(
+                editingState.state.masking.selectMask(
+                    com.prabhat.photocraft.edit.MaskType.SUBJECT
+                ),
+                "Select Subject Mask"
+            )
+            refreshMaskStatus()
+            syncUiState()
+        }
+
+        backgroundButton.setOnClickListener {
+            editingState.updateMasking(
+                editingState.state.masking.selectMask(
+                    com.prabhat.photocraft.edit.MaskType.BACKGROUND
+                ),
+                "Select Background Mask"
+            )
+            refreshMaskStatus()
+            syncUiState()
+        }
+
+        brushButton.setOnClickListener {
+            activeTool = "Brush"
+            refreshMaskStatus()
+        }
+
+        eraserButton.setOnClickListener {
+            activeTool = "Eraser"
+            refreshMaskStatus()
+        }
+
+        invertButton.setOnClickListener {
+            val masking = editingState.state.masking
+            val layer = masking.selected()
+            val updatedLayer = layer.copy(inverted = !layer.inverted)
+            val updatedMasking = when (masking.selectedMask) {
+                com.prabhat.photocraft.edit.MaskType.SUBJECT ->
+                    masking.copy(subject = updatedLayer)
+                com.prabhat.photocraft.edit.MaskType.BACKGROUND ->
+                    masking.copy(background = updatedLayer)
+            }
+            editingState.updateMasking(updatedMasking, "Invert Mask")
+            refreshMaskStatus()
+            syncUiState()
+        }
+
+        preview.setMaskTouchListener { x, y, action ->
+            if (selectedCategory != EditorCategory.MASKING || compareHeld || sourceBitmap == null) {
+                false
+            } else {
+                when (action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        editingState.beginGesture()
+                        val masking = editingState.state.masking
+                        editingState.updateMasking(
+                            masking.paintSelected(
+                                sourceBitmap!!.width,
+                                sourceBitmap!!.height,
+                                x, y, masking.brushSize, masking.brushFlow.toInt(),
+                                erase = activeTool == "Eraser"
+                            ),
+                            "Paint Mask"
+                        )
+                        refreshMaskStatus()
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        val masking = editingState.state.masking
+                        editingState.updateMasking(
+                            masking.paintSelected(
+                                sourceBitmap!!.width,
+                                sourceBitmap!!.height,
+                                x, y, masking.brushSize, masking.brushFlow.toInt(),
+                                erase = activeTool == "Eraser"
+                            ),
+                            "Paint Mask"
+                        )
+                        refreshMaskStatus()
+                    }
+                    android.view.MotionEvent.ACTION_UP -> {
+                        editingState.endGesture()
+                        refreshMaskStatus()
+                        syncUiState()
+                    }
+                    android.view.MotionEvent.ACTION_CANCEL -> {
+                        editingState.cancelGesture()
+                        refreshMaskStatus()
+                        syncUiState()
+                    }
+                }
+                true
+            }
+        }
+
+        refreshMaskStatus()
+    }
+
     private fun wireControls() {
         openPhotoButton.setOnClickListener { openPhotoPicker() }
         changePhotoButton.setOnClickListener { openPhotoPicker() }
@@ -1176,6 +1301,7 @@ class MainActivity : Activity() {
                 R.id.lightCategory -> EditorCategory.LIGHT
                 R.id.colorCategory -> EditorCategory.COLOR
                 R.id.effectsCategory -> EditorCategory.EFFECTS
+                R.id.maskingCategory -> EditorCategory.MASKING
                 R.id.cropCategory -> EditorCategory.CROP
                 else -> return@setOnCheckedChangeListener
             }
@@ -1349,6 +1475,7 @@ class MainActivity : Activity() {
                 EditorCategory.LIGHT -> R.id.lightCategory
                 EditorCategory.COLOR -> R.id.colorCategory
                 EditorCategory.EFFECTS -> R.id.effectsCategory
+                EditorCategory.MASKING -> R.id.maskingCategory
                 EditorCategory.CROP -> R.id.cropCategory
             }
         )
@@ -1362,6 +1489,8 @@ class MainActivity : Activity() {
             if (selectedCategory == EditorCategory.COLOR) View.VISIBLE else View.GONE
         filterPanel.visibility =
             if (selectedCategory == EditorCategory.EFFECTS) View.VISIBLE else View.GONE
+        maskingPanel.visibility =
+            if (selectedCategory == EditorCategory.MASKING) View.VISIBLE else View.GONE
         cropPanel.visibility =
             if (selectedCategory == EditorCategory.CROP) View.VISIBLE else View.GONE
         cropOverlay.visibility = if (

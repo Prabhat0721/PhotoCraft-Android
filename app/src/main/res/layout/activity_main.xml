@@ -391,6 +391,84 @@
                         </LinearLayout>
 
                         <LinearLayout
+                            android:id="@+id/maskingPanel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <TextView
+                                style="@style/PhotoCraftSectionLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:accessibilityHeading="true"
+                                android:text="Masking" />
+
+                            <TextView
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:text="Local Subject and Background editing will be configured here. Selection and brush tools are not active yet." />
+                        
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:orientation="horizontal">
+
+                                <Button
+                                    android:id="@+id/maskSubjectButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Subject" />
+
+                                <Button
+                                    android:id="@+id/maskBackgroundButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Background" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+
+                                <Button
+                                    android:id="@+id/maskBrushButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Brush" />
+
+                                <Button
+                                    android:id="@+id/maskEraserButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Eraser" />
+
+                                <Button
+                                    android:id="@+id/maskInvertButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Invert" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/maskStatusText"
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="Select a mask to begin." />
+</LinearLayout>
+
+                        <LinearLayout
                             android:id="@+id/filterPanel"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -706,6 +784,28 @@
                     android:textAllCaps="false"
                     android:textColor="@color/compare_option_text"
                     android:textSize="10sp" />
+
+                <RadioButton
+                    android:id="@+id/maskingCategory"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_category_option"
+                    android:button="@null"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:text="Masking"
+                    android:textAllCaps="false"
+                    android:textColor="@color/compare_option_text"
+                    android:textSize="10sp" android:drawableTop="@drawable/ic_masking"
+                    android:drawablePadding="3dp"
+                    android:drawableTint="@color/compare_option_text"
+                    />
 
                 <RadioButton
                     android:id="@+id/cropCategory"

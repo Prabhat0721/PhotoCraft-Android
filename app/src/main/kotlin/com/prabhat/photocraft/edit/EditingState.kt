@@ -100,6 +100,15 @@ class EditingState(initial: EditState = EditState()) {
         return commit(next, label)
     }
 
+    fun updateMasking(
+        masking: MaskingState,
+        label: String = "Masking"
+    ): Boolean {
+        val next = state.copy(masking = masking)
+        if (next == state) return false
+        return commit(next, label)
+    }
+
     fun applyPreset(next: EditState, label: String): Boolean {
         if (next == state) {
             return false
