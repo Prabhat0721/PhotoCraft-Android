@@ -16,6 +16,7 @@ import com.prabhat.photocraft.edit.ColorGradingMath
 import com.prabhat.photocraft.edit.ColorGradingSettings
 import com.prabhat.photocraft.edit.Adjustments
 import com.prabhat.photocraft.edit.FilterMath
+import com.prabhat.photocraft.edit.PhotoEffectsMath
 import com.prabhat.photocraft.edit.FilterSettings
 import com.prabhat.photocraft.edit.CropSelection
 import com.prabhat.photocraft.edit.MaskLayer
@@ -323,80 +324,93 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
                 tile.height
             )
             val percent = 20 + ((index + 1) * 70 / tiles.size)
-            reportProgress(requestId, Stage.PROCESSING, percent, onProgress)
-        }
-        return true
-    }
-
-    private fun applyLocalMaskAdjustments(
+            reportProgress(requestId, Stage.PROCESSING, percen    private fun applyLocalMaskAdjustments(
         bitmap: Bitmap,
         masking: MaskingState,
         crop: CropSelection
     ): Boolean {
-        val layers = listOf(masking.subject, masking.background)
-            .filter { it.enabled && it.selection != null &&
-                !it.adjustments.adjustments.isNeutral() }
+        val layers = listOf(masking.subject, masking.background).filter { layer ->
+            val local = layer.adjustments
+            layer.enabled && layer.selection != null &&
+                (!local.adjustments.isNeutral() ||
+                 !local.filter.isNeutral() ||
+                 !local.effects.isNeutral() ||
+                 !local.colorGrading.isNeutral())
+        }
 
         for (layer in layers) {
             if (isCancelled()) return false
             val selection = layer.selection ?: continue
-            val tiles = ExportTiling.plan(bitmap.width, bitmap.height)
+            val local = layer.adjustments
+            val width = bitmap.width
+            val height = bitmap.height
 
-            for (tile in tiles) {
+            // Effects use full-image coordinates to avoid tile-boundary artifacts.
+            val editedFrame = if (!local.effects.isNeutral()) {
+                val count = width.toLong() * height.toLong()
+                if (count > Int.MAX_VALUE) return false
+                val frame = try {
+                    IntArray(count.toInt())
+                } catch (_: OutOfMemoryError) {
+                    return false
+                }
+                bitmap.getPixels(frame, 0, width, 0, 0, width, height)
+                AdjustmentMath.applyInPlace(frame, local.adjustments)
+                FilterMath.applyInPlace(frame, local.filter)
+                PhotoEffectsMath.applyInPlace(frame, width, height, local.effects)
+                ColorGradingMath.applyInPlace(frame, local.colorGrading)
+                frame
+            } else null
+
+            for (tile in ExportTiling.plan(width, height)) {
                 if (isCancelled()) return false
-
                 val pixels = IntArray(tile.pixelCount)
-                bitmap.getPixels(
-                    pixels, 0, tile.width,
-                    tile.left, tile.top, tile.width, tile.height
-                )
+                bitmap.getPixels(pixels, 0, tile.width, tile.left, tile.top, tile.width, tile.height)
 
-                val adjusted = pixels.copyOf()
-                AdjustmentMath.applyInPlace(
-                    adjusted, layer.adjustments.adjustments, tile.pixelCount
-                )
+                val adjusted = if (editedFrame == null) {
+                    pixels.copyOf().also {
+                        AdjustmentMath.applyInPlace(it, local.adjustments, tile.pixelCount)
+                        FilterMath.applyInPlace(it, local.filter, tile.pixelCount)
+                        ColorGradingMath.applyInPlace(it, local.colorGrading, tile.pixelCount)
+                    }
+                } else null
 
                 for (localY in 0 until tile.height) {
                     val outputY = tile.top + localY
-                    val sourceY = crop.top +
-                        ((outputY + 0.5f) / bitmap.height) * crop.height
-                    val maskY = (sourceY * selection.height)
-                        .toInt().coerceIn(0, selection.height - 1)
+                    val sourceY = crop.top + ((outputY + 0.5f) / height) * crop.height
+                    val maskY = (sourceY * selection.height).toInt().coerceIn(0, selection.height - 1)
 
                     for (localX in 0 until tile.width) {
                         val outputX = tile.left + localX
-                        val sourceX = crop.left +
-                            ((outputX + 0.5f) / bitmap.width) * crop.width
-                        val maskX = (sourceX * selection.width)
-                            .toInt().coerceIn(0, selection.width - 1)
-
+                        val sourceX = crop.left + ((outputX + 0.5f) / width) * crop.width
+                        val maskX = (sourceX * selection.width).toInt().coerceIn(0, selection.width - 1)
                         var coverage = selection.coverageAt(maskX, maskY)
                         if (layer.inverted) coverage = 255 - coverage
                         if (coverage == 0) continue
 
                         val i = localY * tile.width + localX
                         val base = pixels[i]
-                        val edited = adjusted[i]
+                        val edited = editedFrame?.get(outputY * width + outputX) ?: adjusted!![i]
                         val amount = coverage / 255f
 
                         fun blend(shift: Int): Int {
                             val a = (base shr shift) and 0xFF
                             val b = (edited shr shift) and 0xFF
-                            return (a + (b - a) * amount)
-                                .toInt().coerceIn(0, 255)
+                            return (a + (b - a) * amount).toInt().coerceIn(0, 255)
                         }
 
                         pixels[i] = (base and -0x1000000) or
-                            (blend(16) shl 16) or
-                            (blend(8) shl 8) or
-                            blend(0)
+                            (blend(16) shl 16) or (blend(8) shl 8) or blend(0)
                     }
                 }
 
-                bitmap.setPixels(
-                    pixels, 0, tile.width,
-                    tile.left, tile.top, tile.width, tile.height
-                )
+                bitmap.setPixels(pixels, 0, tile.width, tile.left, tile.top, tile.width, tile.height)
+            }
+        }
+        return true
+    }
+
+
             }
         }
         return true
