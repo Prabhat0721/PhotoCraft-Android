@@ -324,7 +324,12 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
                 tile.height
             )
             val percent = 20 + ((index + 1) * 70 / tiles.size)
-            reportProgress(requestId, Stage.PROCESSING, percen    private fun applyLocalMaskAdjustments(
+            reportProgress(requestId, Stage.PROCESSING, percent, onProgress)
+        }
+        return true
+    }
+
+    private fun applyLocalMaskAdjustments(
         bitmap: Bitmap,
         masking: MaskingState,
         crop: CropSelection
@@ -405,12 +410,6 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
                 }
 
                 bitmap.setPixels(pixels, 0, tile.width, tile.left, tile.top, tile.width, tile.height)
-            }
-        }
-        return true
-    }
-
-
             }
         }
         return true
