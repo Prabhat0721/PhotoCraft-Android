@@ -644,6 +644,24 @@ class MainActivity : Activity() {
             updateEffects(editingState.state.effects.copy(details = value))
         }
         addAdvancedSlider(
+            effectsControls, "effect_clarity", "Clarity",
+            -100, 100, editingState.state.effects.clarity
+        ) { value ->
+            updateEffects(editingState.state.effects.copy(clarity = value))
+        }
+        addAdvancedSlider(
+            effectsControls, "effect_dehaze", "Dehaze",
+            -100, 100, editingState.state.effects.dehaze
+        ) { value ->
+            updateEffects(editingState.state.effects.copy(dehaze = value))
+        }
+        addAdvancedSlider(
+            effectsControls, "effect_grain", "Grain",
+            0, 100, editingState.state.effects.grain
+        ) { value ->
+            updateEffects(editingState.state.effects.copy(grain = value))
+        }
+        addAdvancedSlider(
             effectsControls, "effect_vignette", "Vignette",
             -100, 100, editingState.state.effects.vignette
         ) { value ->
@@ -806,6 +824,9 @@ class MainActivity : Activity() {
         setValue("effect_texture", effects.texture, -100)
         setValue("effect_sharpness", effects.sharpness, -100)
         setValue("effect_details", effects.details, -100)
+        setValue("effect_clarity", effects.clarity, -100)
+        setValue("effect_dehaze", effects.dehaze, -100)
+        setValue("effect_grain", effects.grain, 0)
         setValue("effect_vignette", effects.vignette, -100)
         setValue("effect_noise", effects.noiseReduction, -100)
     }

@@ -10,18 +10,22 @@ data class PhotoEffects(
     val texture: Int = 0,
     val details: Int = 0,
     val noiseReduction: Int = 0,
-    val vignette: Int = 0
+    val vignette: Int = 0,
+    val clarity: Int = 0,
+    val dehaze: Int = 0,
+    val grain: Int = 0
 ) {
     init {
-        require(listOf(sharpness, texture, details, noiseReduction, vignette)
-            .all { it in -100..100 }) {
-            "Effect values must be between -100 and 100."
+        require(listOf(sharpness, texture, details, noiseReduction, vignette, clarity, dehaze)
+            .all { it in -100..100 } && grain in 0..100) {
+            "Effect values out of range."
         }
     }
 
     fun isNeutral(): Boolean =
         sharpness == 0 && texture == 0 && details == 0 &&
-            noiseReduction == 0 && vignette == 0
+            noiseReduction == 0 && vignette == 0 &&
+            clarity == 0 && dehaze == 0 && grain == 0
 
     companion object {
         val NEUTRAL = PhotoEffects()
@@ -52,6 +56,11 @@ object PhotoEffectsMath {
         if (effects.details != 0) {
             localContrast(pixels, width, height, effects.details, 1, 0.45f)
         }
+        if (effects.clarity != 0) {
+            localContrast(pixels, width, height, effects.clarity, 2, 0.65f)
+        }
+        if (effects.dehaze != 0) applyDehaze(pixels, effects.dehaze)
+        if (effects.grain != 0) applyGrain(pixels, effects.grain)
         if (effects.vignette != 0) {
             applyVignette(pixels, width, height, effects.vignette)
         }
@@ -116,6 +125,33 @@ object PhotoEffectsMath {
                 (channel(r, sr / count, strength) shl 16) or
                 (channel(g, sg / count, strength) shl 8) or
                 channel(b, sb / count, strength)
+        }
+    }
+
+    private fun applyDehaze(pixels: IntArray, amount: Int) {
+        val strength = amount / 100f
+        val contrast = 1f + strength * 0.55f
+        val offset = -strength * 16f
+        for (i in pixels.indices) {
+            val c = pixels[i]
+            val r = clamp(((c shr 16 and 255) - 128f) * contrast + 128f + offset)
+            val g = clamp(((c shr 8 and 255) - 128f) * contrast + 128f + offset)
+            val b = clamp(((c and 255) - 128f) * contrast + 128f + offset)
+            pixels[i] = (c and -0x1000000) or (r shl 16) or (g shl 8) or b
+        }
+    }
+
+    private fun applyGrain(pixels: IntArray, amount: Int) {
+        val strength = amount / 100f * 14f
+        for (i in pixels.indices) {
+            val c = pixels[i]
+            var seed = i * 1103515245 + 12345
+            seed = seed xor (seed ushr 16)
+            val noise = (((seed and 255) / 127.5f) - 1f) * strength
+            val r = clamp((c shr 16 and 255) + noise)
+            val g = clamp((c shr 8 and 255) + noise)
+            val b = clamp((c and 255) + noise)
+            pixels[i] = (c and -0x1000000) or (r shl 16) or (g shl 8) or b
         }
     }
 
