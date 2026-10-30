@@ -4,7 +4,7 @@ import kotlin.math.roundToInt
 
 object M5StateCodec {
     const val LEGACY_VALUE_COUNT = 18
-    const val VALUE_COUNT = 53
+    const val VALUE_COUNT = 54
     private const val ADJUSTMENT_COUNT = 11
     private const val BASIS_POINT_SCALE = 10000f
 
@@ -36,13 +36,14 @@ object M5StateCodec {
             values[i++] = grade.luminance
         }
         values[i++] = state.colorGrading.balance
-        values[i] = state.colorGrading.blending
+        values[i++] = state.colorGrading.blending
+        values[i] = if (state.blackAndWhite) 1 else 0
         return values
     }
 
     fun decode(values: IntArray?): EditState? {
         if (values == null ||
-            (values.size != LEGACY_VALUE_COUNT && values.size != VALUE_COUNT)
+            (values.size != LEGACY_VALUE_COUNT && values.size != 53 && values.size != VALUE_COUNT)
         ) return null
 
         return try {
@@ -63,7 +64,7 @@ object M5StateCodec {
             )
 
             var grading = ColorGradingSettings.NEUTRAL
-            if (values.size == VALUE_COUNT) {
+            if (values.size == 53 || values.size == VALUE_COUNT) {
                 var i = LEGACY_VALUE_COUNT
                 val adjustmentsByColor = HslColor.entries.associateWith {
                     HslAdjustment(
@@ -107,7 +108,8 @@ object M5StateCodec {
                 crop = crop,
                 cropRatio = ratio,
                 filter = filterSettings,
-                colorGrading = grading
+                colorGrading = grading,
+                blackAndWhite = values.size == VALUE_COUNT && values[53] != 0
             )
         } catch (_: IllegalArgumentException) {
             null

@@ -100,6 +100,15 @@ class EditingState(initial: EditState = EditState()) {
         return commit(next, label)
     }
 
+    fun updateBlackAndWhite(
+        enabled: Boolean,
+        label: String = "Black & White"
+    ): Boolean {
+        val next = state.copy(blackAndWhite = enabled)
+        if (next == state) return false
+        return commit(next, label)
+    }
+
     fun updateMasking(
         masking: MaskingState,
         label: String = "Masking"

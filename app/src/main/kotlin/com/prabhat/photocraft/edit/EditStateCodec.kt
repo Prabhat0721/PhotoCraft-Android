@@ -3,7 +3,7 @@ package com.prabhat.photocraft.edit
 import kotlin.math.roundToInt
 
 object EditStateCodec {
-    const val VALUE_COUNT = 16
+    const val VALUE_COUNT = 17
     private const val ADJUSTMENT_COUNT = 11
     private const val BASIS_POINT_SCALE = 10000f
 
@@ -15,11 +15,12 @@ object EditStateCodec {
         values[13] = toBasisPoints(state.crop.right)
         values[14] = toBasisPoints(state.crop.bottom)
         values[15] = state.cropRatio.ordinal
+        values[16] = if (state.blackAndWhite) 1 else 0
         return values
     }
 
     fun decode(values: IntArray?): EditState? {
-        if (values == null || values.size != VALUE_COUNT) {
+        if (values == null || (values.size != 16 && values.size != VALUE_COUNT)) {
             return null
         }
         val adjustments = try {
@@ -41,7 +42,8 @@ object EditStateCodec {
         return EditState(
             adjustments = adjustments,
             crop = crop,
-            cropRatio = ratio
+            cropRatio = ratio,
+            blackAndWhite = values.size > 16 && values[16] != 0
         )
     }
 

@@ -56,5 +56,6 @@ data class ExportRequest(
     val colorGrading: com.prabhat.photocraft.edit.ColorGradingSettings = com.prabhat.photocraft.edit.ColorGradingSettings.NEUTRAL,
     val sourceWidth: Int = 0,
     val sourceHeight: Int = 0,
-    val masking: MaskingState = MaskingState()
+    val masking: MaskingState = MaskingState(),
+    val blackAndWhite: Boolean = false
 )

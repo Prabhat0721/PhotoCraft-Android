@@ -365,7 +365,7 @@
                                 style="@style/PhotoCraftSectionLabel"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="18dp"
+                                android:layout_marginTop="20dp"
                                 android:accessibilityHeading="true"
                                 android:text="HSL Color Mixer" />
 
@@ -379,7 +379,7 @@
                                 style="@style/PhotoCraftSectionLabel"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="18dp"
+                                android:layout_marginTop="20dp"
                                 android:accessibilityHeading="true"
                                 android:text="Color Grading" />
 
@@ -512,7 +512,7 @@
                                 style="@style/PhotoCraftSectionLabel"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="14dp"
+                                android:layout_marginTop="18dp"
                                 android:accessibilityHeading="true"
                                 android:text="Effects" />
 
@@ -737,11 +737,11 @@
             <RadioGroup
                 android:id="@+id/categoryGroup"
                 android:layout_width="match_parent"
-                android:layout_height="68dp"
+                android:layout_height="76dp"
                 android:orientation="horizontal"
-                android:paddingStart="8dp"
+                android:paddingStart="12dp"
                 android:paddingTop="6dp"
-                android:paddingEnd="8dp"
+                android:paddingEnd="12dp"
                 android:paddingBottom="6dp">
 
                 <RadioButton
@@ -756,7 +756,7 @@
                     android:checked="true"
                     android:drawableTop="@drawable/ic_light"
                     android:drawablePadding="3dp"
-                    android:drawableTint="@color/compare_option_text"
+                    android:drawableTint="@color/category_text_color"
                     android:fontFamily="sans-serif-medium"
                     android:gravity="center"
                     android:includeFontPadding="false"
@@ -764,7 +764,7 @@
                     android:minWidth="0dp"
                     android:text="@string/category_light"
                     android:textAllCaps="false"
-                    android:textColor="@color/compare_option_text"
+                    android:textColor="@color/category_text_color"
                     android:textSize="10sp" />
 
                 <RadioButton
@@ -778,7 +778,7 @@
                     android:button="@null"
                     android:drawableTop="@drawable/ic_color"
                     android:drawablePadding="3dp"
-                    android:drawableTint="@color/compare_option_text"
+                    android:drawableTint="@color/category_text_color"
                     android:fontFamily="sans-serif-medium"
                     android:gravity="center"
                     android:includeFontPadding="false"
@@ -786,7 +786,7 @@
                     android:minWidth="0dp"
                     android:text="@string/category_color"
                     android:textAllCaps="false"
-                    android:textColor="@color/compare_option_text"
+                    android:textColor="@color/category_text_color"
                     android:textSize="10sp" />
 
                 <RadioButton
@@ -800,7 +800,7 @@
                     android:button="@null"
                     android:drawableTop="@drawable/ic_effects"
                     android:drawablePadding="3dp"
-                    android:drawableTint="@color/compare_option_text"
+                    android:drawableTint="@color/category_text_color"
                     android:fontFamily="sans-serif-medium"
                     android:gravity="center"
                     android:includeFontPadding="false"
@@ -808,7 +808,7 @@
                     android:minWidth="0dp"
                     android:text="@string/category_effects"
                     android:textAllCaps="false"
-                    android:textColor="@color/compare_option_text"
+                    android:textColor="@color/category_text_color"
                     android:textSize="10sp" />
 
                 <RadioButton
@@ -827,10 +827,10 @@
                     android:minWidth="0dp"
                     android:text="Masking"
                     android:textAllCaps="false"
-                    android:textColor="@color/compare_option_text"
+                    android:textColor="@color/category_text_color"
                     android:textSize="10sp" android:drawableTop="@drawable/ic_masking"
                     android:drawablePadding="3dp"
-                    android:drawableTint="@color/compare_option_text"
+                    android:drawableTint="@color/category_text_color"
                     />
 
                 <RadioButton
@@ -844,7 +844,7 @@
                     android:button="@null"
                     android:drawableTop="@drawable/ic_crop"
                     android:drawablePadding="3dp"
-                    android:drawableTint="@color/compare_option_text"
+                    android:drawableTint="@color/category_text_color"
                     android:fontFamily="sans-serif-medium"
                     android:gravity="center"
                     android:includeFontPadding="false"
@@ -852,7 +852,7 @@
                     android:minWidth="0dp"
                     android:text="@string/category_crop"
                     android:textAllCaps="false"
-                    android:textColor="@color/compare_option_text"
+                    android:textColor="@color/category_text_color"
                     android:textSize="10sp" />
             </RadioGroup>
         </LinearLayout>

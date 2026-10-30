@@ -62,10 +62,12 @@
 
     <style name="PhotoCraftSectionLabel">
         <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textColor">@color/text_primary</item>
         <item name="android:textSize">11sp</item>
-        <item name="android:letterSpacing">0.14</item>
+        <item name="android:letterSpacing">0.12</item>
         <item name="android:textAllCaps">true</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">4dp</item>
     </style>
 
     <style name="PhotoCraftInput" parent="@android:style/Widget.Material.EditText">

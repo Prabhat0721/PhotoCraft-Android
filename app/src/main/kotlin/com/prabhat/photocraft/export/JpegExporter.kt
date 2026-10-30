@@ -13,6 +13,8 @@ import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import com.prabhat.photocraft.edit.AdjustmentMath
 import com.prabhat.photocraft.edit.ColorGradingMath
+
+import com.prabhat.photocraft.edit.BlackAndWhiteMath
 import com.prabhat.photocraft.edit.ColorGradingSettings
 import com.prabhat.photocraft.edit.Adjustments
 import com.prabhat.photocraft.edit.FilterMath
@@ -233,6 +235,15 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
 
             if (!applyLocalMaskAdjustments(bitmap, request.masking, request.crop)) {
                 return Result.Failure(FailureReason.CANCELLED)
+            }
+
+            if (request.blackAndWhite) {
+                val row = IntArray(bitmap.width)
+                for (y in 0 until bitmap.height) {
+                    bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
+                    BlackAndWhiteMath.applyInPlace(row)
+                    bitmap.setPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
+                }
             }
 
             if (isCancelled()) {

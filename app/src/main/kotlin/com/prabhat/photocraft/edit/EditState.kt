@@ -7,7 +7,8 @@ data class EditState(
     val filter: FilterSettings = FilterSettings.NEUTRAL,
     val effects: PhotoEffects = PhotoEffects.NEUTRAL,
     val colorGrading: ColorGradingSettings = ColorGradingSettings.NEUTRAL,
-    val masking: MaskingState = MaskingState()
+    val masking: MaskingState = MaskingState(),
+    val blackAndWhite: Boolean = false
 ) {
     fun isNeutral(): Boolean =
         adjustments.isNeutral() &&
@@ -16,5 +17,6 @@ data class EditState(
             filter.isNeutral() &&
             effects.isNeutral() &&
             colorGrading.isNeutral() &&
-            masking.isNeutral()
+            masking.isNeutral() &&
+            !blackAndWhite
 }

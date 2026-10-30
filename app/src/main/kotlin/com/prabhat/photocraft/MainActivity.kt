@@ -544,6 +544,25 @@ class MainActivity : Activity() {
 
     private enum class GradeRegion { SHADOWS, MIDTONES, HIGHLIGHTS }
 
+    private enum class HslChannel(val label: String, val suffix: String) {
+        HUE("Hue", "hue"),
+        SATURATION("Saturation", "sat"),
+        LUMINANCE("Luminance", "lum")
+    }
+
+    private val advancedRows = LinkedHashMap<String, View>()
+    private val hslDotItems = LinkedHashMap<HslColor, TextView>()
+    private val hslChannelViews = LinkedHashMap<HslChannel, TextView>()
+
+    private var selectedHslColor = HslColor.RED
+    private var selectedHslChannel = HslChannel.HUE
+
+    private lateinit var bwButton: Button
+    private lateinit var colourButton: Button
+    private lateinit var hslSelectorContainer: LinearLayout
+    private lateinit var hslSectionTitle: View
+    private lateinit var selectedHslName: TextView
+
     private fun setupAdvancedControls() {
         hslControls.removeAllViews()
         gradingControls.removeAllViews()
@@ -551,6 +570,7 @@ class MainActivity : Activity() {
         advancedSeekBars.clear()
         advancedLabels.clear()
         advancedLabelTitles.clear()
+        advancedRows.clear()
 
         for (color in HslColor.entries) {
             val title = color.name.lowercase().replaceFirstChar { it.uppercase() }
@@ -675,6 +695,7 @@ class MainActivity : Activity() {
         }
 
         applyAdvancedControlsFromState()
+        buildColorModeControls()
     }
 
     private fun addAdvancedSlider(
@@ -688,11 +709,12 @@ class MainActivity : Activity() {
     ) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(5), 0, dp(5))
+            setPadding(0, dp(8), 0, dp(8))
         }
         val label = TextView(this).apply {
-            textSize = 13f
-            setTextColor(getColor(R.color.text_secondary))
+            textSize = 14f
+            setTextColor(getColor(R.color.text_primary))
+            setPadding(0, dp(2), 0, dp(4))
         }
         val seekBar = SeekBar(this).apply {
             this.max = maximum - minimum
@@ -706,6 +728,7 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
+        advancedRows[key] = row
         row.addView(seekBar, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
@@ -720,6 +743,61 @@ class MainActivity : Activity() {
             label.text = "$title: $value"
         }
         showValue(initialValue)
+
+        label.setOnClickListener {
+            if (!canEditPhoto()) return@setOnClickListener
+
+            val valueInput = android.widget.EditText(this).apply {
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                    android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+                setSingleLine(true)
+                setText(currentValue().toString())
+                selectAll()
+                hint = "$minimum to $maximum"
+            }
+
+            val dialog = android.app.AlertDialog.Builder(this)
+                .setTitle("Enter $title")
+                .setView(valueInput)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("OK", null)
+                .create()
+
+            dialog.setOnShowListener {
+                dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+                    .setOnClickListener {
+                        val entered = valueInput.text.toString()
+                            .trim().toIntOrNull()
+
+                        if (entered != null && canEditPhoto()) {
+                            val value = entered.coerceIn(minimum, maximum)
+                            editingState.beginGesture()
+                            seekBar.progress = value - minimum
+                            showValue(value)
+                            onValueChanged(value)
+                            editingState.endGesture()
+                            dialog.dismiss()
+                        } else {
+                            valueInput.error = "Enter a whole number"
+                        }
+                    }
+            }
+
+            dialog.window?.setSoftInputMode(
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+            )
+            dialog.show()
+            valueInput.requestFocus()
+            valueInput.post {
+                val keyboard = getSystemService(
+                    android.content.Context.INPUT_METHOD_SERVICE
+                ) as android.view.inputmethod.InputMethodManager
+                keyboard.showSoftInput(
+                    valueInput,
+                    android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT
+                )
+            }
+        }
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -829,6 +907,206 @@ class MainActivity : Activity() {
         setValue("effect_grain", effects.grain, 0)
         setValue("effect_vignette", effects.vignette, -100)
         setValue("effect_noise", effects.noiseReduction, -100)
+        if (::hslSelectorContainer.isInitialized) refreshHslControls()
+    }
+
+
+    private fun buildColorModeControls() {
+        if (::bwButton.isInitialized) {
+            refreshHslControls()
+            return
+        }
+
+        val panel = findViewById<LinearLayout>(R.id.colorPanel)
+        if (panel.childCount < 6) return
+
+        val modeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+        }
+
+        bwButton = Button(this).apply {
+            text = "B&W"
+            isAllCaps = false
+            setOnClickListener { setBlackAndWhite(true) }
+        }
+
+        colourButton = Button(this).apply {
+            text = "Colour"
+            isAllCaps = false
+            setOnClickListener { setBlackAndWhite(false) }
+        }
+
+        modeRow.addView(
+            bwButton,
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                marginEnd = dp(6)
+            }
+        )
+        modeRow.addView(
+            colourButton,
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                marginStart = dp(6)
+            }
+        )
+
+        panel.addView(modeRow, 1)
+
+        hslSectionTitle = panel.getChildAt(3)
+
+        hslSelectorContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(6), 0, dp(8))
+        }
+
+        selectedHslName = TextView(this).apply {
+            text = "Red"
+            textSize = 14f
+            setPadding(dp(4), dp(5), dp(4), dp(7))
+        }
+        hslSelectorContainer.addView(selectedHslName)
+
+        val dotsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+        }
+
+        val colors = listOf(
+            HslColor.RED to 0xFFE53935.toInt(),
+            HslColor.ORANGE to 0xFFFF9800.toInt(),
+            HslColor.YELLOW to 0xFFFFD600.toInt(),
+            HslColor.GREEN to 0xFF43A047.toInt(),
+            HslColor.CYAN to 0xFF00BCD4.toInt(),
+            HslColor.BLUE to 0xFF2979FF.toInt(),
+            HslColor.PURPLE to 0xFF8E24AA.toInt(),
+            HslColor.MAGENTA to 0xFFE91E63.toInt()
+        )
+
+        colors.forEach { (color, tint) ->
+            val label = when (color) {
+                HslColor.CYAN -> "Aqua"
+                else -> color.name.lowercase()
+                    .replaceFirstChar { it.uppercase() }
+            }
+
+            val item = TextView(this).apply {
+                text = "●\n$label"
+                textSize = 9f
+                gravity = android.view.Gravity.CENTER
+                setTextColor(tint)
+                setPadding(0, dp(5), 0, dp(5))
+                setOnClickListener {
+                    selectedHslColor = color
+                    refreshHslControls()
+                }
+            }
+
+            hslDotItems[color] = item
+            dotsRow.addView(
+                item,
+                LinearLayout.LayoutParams(0, dp(48), 1f)
+            )
+        }
+
+        hslSelectorContainer.addView(dotsRow)
+
+        val channelRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+        }
+
+        HslChannel.values().forEach { channel ->
+            val item = TextView(this).apply {
+                text = channel.label
+                textSize = 12f
+                gravity = android.view.Gravity.CENTER
+                setPadding(dp(5), dp(10), dp(5), dp(10))
+                setOnClickListener {
+                    selectedHslChannel = channel
+                    refreshHslControls()
+                }
+            }
+
+            hslChannelViews[channel] = item
+            channelRow.addView(
+                item,
+                LinearLayout.LayoutParams(0, dp(42), 1f)
+            )
+        }
+
+        hslSelectorContainer.addView(channelRow)
+        panel.addView(hslSelectorContainer, 4)
+
+        refreshHslControls()
+    }
+
+    private fun setBlackAndWhite(enabled: Boolean) {
+        if (!canEditPhoto()) return
+        if (editingState.state.blackAndWhite == enabled) return
+
+        editingState.updateBlackAndWhite(
+            enabled,
+            if (enabled) "Black & White" else "Colour"
+        )
+
+        clearExportStatus()
+        requestPreviewRender()
+        refreshHslControls()
+        syncUiState()
+    }
+
+    private fun refreshHslControls() {
+        if (!::hslSelectorContainer.isInitialized) return
+
+        val blackAndWhite = editingState.state.blackAndWhite
+
+        hslSectionTitle.visibility =
+            if (blackAndWhite) View.GONE else View.VISIBLE
+
+        hslSelectorContainer.visibility =
+            if (blackAndWhite) View.GONE else View.VISIBLE
+
+        hslControls.visibility =
+            if (blackAndWhite) View.GONE else View.VISIBLE
+
+        bwButton.alpha = if (blackAndWhite) 1f else 0.72f
+        colourButton.alpha = if (blackAndWhite) 0.72f else 1f
+
+        selectedHslName.text = when (selectedHslColor) {
+            HslColor.CYAN -> "Aqua"
+            else -> selectedHslColor.name.lowercase()
+                .replaceFirstChar { it.uppercase() }
+        }
+
+        hslDotItems.forEach { (color, view) ->
+            view.setBackgroundColor(
+                if (color == selectedHslColor) 0x22808080 else android.graphics.Color.TRANSPARENT
+            )
+        }
+
+        hslChannelViews.forEach { (channel, view) ->
+            view.setBackgroundColor(
+                if (channel == selectedHslChannel) 0x22808080 else android.graphics.Color.TRANSPARENT
+            )
+            view.alpha = if (channel == selectedHslChannel) 1f else 0.65f
+        }
+
+        HslColor.values().forEach { color ->
+            HslChannel.values().forEach { channel ->
+                val key = "hsl_${color.name}_${channel.suffix}"
+                advancedRows[key]?.visibility =
+                    if (!blackAndWhite &&
+                        color == selectedHslColor &&
+                        channel == selectedHslChannel
+                    ) View.VISIBLE else View.GONE
+
+                advancedLabels[key]?.let { label ->
+                    if (color == selectedHslColor && channel == selectedHslChannel) {
+                        label.text = channel.label
+                    }
+                }
+            }
+        }
     }
 
     private fun setupFilterControls() {
@@ -1722,6 +2000,7 @@ class MainActivity : Activity() {
     }
 
     private fun afterHistoryChange(previousState: EditState) {
+        if (::hslSelectorContainer.isInitialized) refreshHslControls()
         clearExportStatus()
         updateAllRows()
         applyCropControlsFromState()
@@ -2068,6 +2347,7 @@ class MainActivity : Activity() {
             outputSize = selectedSize,
             filter = editingState.filter,
             colorGrading = editingState.state.colorGrading,
+            blackAndWhite = editingState.state.blackAndWhite,
             sourceWidth = width,
             sourceHeight = height
         )
@@ -2261,7 +2541,8 @@ class MainActivity : Activity() {
         renderer.request(
             source, editingState.adjustments, editingState.filter,
             editingState.state.effects, editingState.state.colorGrading,
-            editingState.state.masking
+            editingState.state.masking,
+            editingState.state.blackAndWhite
         ) { result ->
             if (isDestroyed || isFinishing || sourceBitmap !== source) {
                 return@request

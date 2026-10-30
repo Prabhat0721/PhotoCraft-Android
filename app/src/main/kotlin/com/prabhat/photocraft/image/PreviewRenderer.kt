@@ -7,6 +7,8 @@ import android.os.Looper
 import android.os.Process
 import com.prabhat.photocraft.edit.AdjustmentMath
 import com.prabhat.photocraft.edit.ColorGradingMath
+
+import com.prabhat.photocraft.edit.BlackAndWhiteMath
 import com.prabhat.photocraft.edit.ColorGradingSettings
 import com.prabhat.photocraft.edit.Adjustments
 import com.prabhat.photocraft.edit.FilterMath
@@ -46,6 +48,7 @@ class PreviewRenderer : Closeable {
         effects: PhotoEffects,
         colorGrading: ColorGradingSettings = ColorGradingSettings.NEUTRAL,
         masking: MaskingState = MaskingState(),
+        blackAndWhite: Boolean = false,
         callback: (Result) -> Unit
     ) {
         if (closed.get()) {
@@ -58,7 +61,7 @@ class PreviewRenderer : Closeable {
                 return@post
             }
 
-            val result = render(source, adjustments, filter, effects, colorGrading, masking)
+            val result = render(source, adjustments, filter, effects, colorGrading, masking, blackAndWhite)
 
             if (closed.get() || !requests.isCurrent(requestId)) {
                 recycleDiscarded(result, source)
@@ -81,10 +84,11 @@ class PreviewRenderer : Closeable {
         filter: FilterSettings,
         effects: PhotoEffects,
         colorGrading: ColorGradingSettings,
-        masking: MaskingState
+        masking: MaskingState,
+        blackAndWhite: Boolean
     ): Result {
         if (adjustments.isNeutral() && filter.isNeutral() && effects.isNeutral() &&
-            colorGrading.isNeutral() && masking.isNeutral()) {
+            colorGrading.isNeutral() && masking.isNeutral() && !blackAndWhite) {
             return Result.Success(source)
         }
 
@@ -149,6 +153,7 @@ class PreviewRenderer : Closeable {
                 }
             }
 
+            if (blackAndWhite) BlackAndWhiteMath.applyInPlace(pixels)
             output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
                 density = source.density
                 setPixels(pixels, 0, width, 0, 0, width, height)
