@@ -33,10 +33,14 @@ object PhotoEffectsMath {
         pixels: IntArray,
         width: Int,
         height: Int,
-        effects: PhotoEffects
+        effects: PhotoEffects,
+        originX: Int = 0,
+        originY: Int = 0,
+        fullWidth: Int = width,
+        fullHeight: Int = height
     ) {
-        require(width > 0 && height > 0 && width.toLong() * height == pixels.size.toLong()) {
-            "Pixel dimensions must match the buffer."
+        require(width > 0 && height > 0 && width.toLong() * height <= pixels.size.toLong()) {
+            "Pixel dimensions must fit inside the buffer."
         }
         if (effects.isNeutral()) return
 
@@ -53,7 +57,10 @@ object PhotoEffectsMath {
             localContrast(pixels, width, height, effects.details, 1, 0.45f)
         }
         if (effects.vignette != 0) {
-            applyVignette(pixels, width, height, effects.vignette)
+            applyVignette(
+                pixels, width, height, effects.vignette,
+                originX, originY, fullWidth, fullHeight
+            )
         }
     }
 
@@ -119,16 +126,30 @@ object PhotoEffectsMath {
         }
     }
 
-    private fun applyVignette(p: IntArray, w: Int, h: Int, amount: Int) {
+    private fun applyVignette(
+        p: IntArray,
+        w: Int,
+        h: Int,
+        amount: Int,
+        originX: Int,
+        originY: Int,
+        fullWidth: Int,
+        fullHeight: Int
+    ) {
         val strength = amount / 100f * 0.72f
-        val cx = (w - 1) / 2f
-        val cy = (h - 1) / 2f
+        val cx = (fullWidth - 1) / 2f
+        val cy = (fullHeight - 1) / 2f
         val maxDist = max(1f, sqrt(cx * cx + cy * cy))
         for (y in 0 until h) for (x in 0 until w) {
             val i = y * w + x
             val c = p[i]
             if ((c ushr 24) == 0) continue
-            val d = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / maxDist
+            val globalX = x + originX
+            val globalY = y + originY
+            val d = sqrt(
+                (globalX - cx) * (globalX - cx) +
+                    (globalY - cy) * (globalY - cy)
+            ) / maxDist
             val edge = (d * d).coerceIn(0f, 1f)
             val factor = (1f - strength * edge).coerceIn(0.15f, 1.85f)
             p[i] = (c and -0x1000000) or
@@ -152,3 +173,4 @@ object PhotoEffectsMath {
     private fun clamp(v: Float): Int =
         v.toInt().coerceIn(0, 255)
 }
+

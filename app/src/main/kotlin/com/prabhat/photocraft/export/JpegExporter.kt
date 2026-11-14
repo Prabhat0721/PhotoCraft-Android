@@ -20,6 +20,7 @@ import com.prabhat.photocraft.edit.FilterSettings
 import com.prabhat.photocraft.edit.CropSelection
 import com.prabhat.photocraft.edit.MaskLayer
 import com.prabhat.photocraft.edit.MaskingState
+import com.prabhat.photocraft.edit.PhotoEffectsMath
 import com.prabhat.photocraft.util.RequestSequence
 import java.io.Closeable
 import java.io.IOException
@@ -216,12 +217,13 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
 
             val bitmap = working
             if (!request.adjustments.isNeutral() || !request.filter.isNeutral() ||
-                !request.colorGrading.isNeutral()) {
+                !request.colorGrading.isNeutral() || !request.effects.isNeutral()) {
                 val completed = applyEditsInTiles(
                     bitmap = bitmap,
                     adjustments = request.adjustments,
                     filter = request.filter,
                     colorGrading = request.colorGrading,
+                    effects = request.effects,
                     requestId = requestId,
                     onProgress = onProgress
                 )
@@ -289,6 +291,7 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
         adjustments: Adjustments,
         filter: FilterSettings,
         colorGrading: ColorGradingSettings,
+        effects: com.prabhat.photocraft.edit.PhotoEffects,
         requestId: Int,
         onProgress: (Stage, Int) -> Unit
     ): Boolean {
@@ -312,6 +315,13 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
             )
             AdjustmentMath.applyInPlace(buffer, adjustments, tile.pixelCount)
             FilterMath.applyInPlace(buffer, filter, tile.pixelCount)
+            PhotoEffectsMath.applyInPlace(
+                buffer, tile.width, tile.height, effects,
+                originX = tile.left,
+                originY = tile.top,
+                fullWidth = bitmap.width,
+                fullHeight = bitmap.height
+            )
             ColorGradingMath.applyInPlace(buffer, colorGrading, tile.pixelCount)
             bitmap.setPixels(
                 buffer,
@@ -335,7 +345,10 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
     ): Boolean {
         val layers = listOf(masking.subject, masking.background)
             .filter { it.enabled && it.selection != null &&
-                !it.adjustments.adjustments.isNeutral() }
+                (!it.adjustments.adjustments.isNeutral() ||
+                    !it.adjustments.filter.isNeutral() ||
+                    !it.adjustments.effects.isNeutral() ||
+                    !it.adjustments.colorGrading.isNeutral()) }
 
         for (layer in layers) {
             if (isCancelled()) return false
@@ -354,6 +367,19 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
                 val adjusted = pixels.copyOf()
                 AdjustmentMath.applyInPlace(
                     adjusted, layer.adjustments.adjustments, tile.pixelCount
+                )
+                FilterMath.applyInPlace(
+                    adjusted, layer.adjustments.filter, tile.pixelCount
+                )
+                PhotoEffectsMath.applyInPlace(
+                    adjusted, tile.width, tile.height, layer.adjustments.effects,
+                    originX = tile.left,
+                    originY = tile.top,
+                    fullWidth = bitmap.width,
+                    fullHeight = bitmap.height
+                )
+                ColorGradingMath.applyInPlace(
+                    adjusted, layer.adjustments.colorGrading, tile.pixelCount
                 )
 
                 for (localY in 0 until tile.height) {
@@ -529,3 +555,4 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
         val SUPPORTED_DESTINATION_SCHEMES = setOf("content", "file")
     }
 }
+

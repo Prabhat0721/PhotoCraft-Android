@@ -1295,6 +1295,7 @@ class MainActivity : Activity() {
         val eraserButton = findViewById<Button>(R.id.maskEraserButton)
         val invertButton = findViewById<Button>(R.id.maskInvertButton)
         val statusText = findViewById<TextView>(R.id.maskStatusText)
+        val brushControls = findViewById<LinearLayout>(R.id.maskBrushControls)
         setupLocalMaskAdjustmentControls(
             findViewById(R.id.maskSubjectAdjustments),
             com.prabhat.photocraft.edit.MaskType.SUBJECT
@@ -1302,6 +1303,65 @@ class MainActivity : Activity() {
         setupLocalMaskAdjustmentControls(
             findViewById(R.id.maskBackgroundAdjustments),
             com.prabhat.photocraft.edit.MaskType.BACKGROUND
+        )
+
+        brushControls.removeAllViews()
+        fun addBrushControl(
+            title: String,
+            minimum: Int,
+            maximum: Int,
+            initial: Int,
+            write: (com.prabhat.photocraft.edit.MaskingState, Int) ->
+                com.prabhat.photocraft.edit.MaskingState
+        ) {
+            val label = TextView(this).apply {
+                textSize = 13f
+                setTextColor(getColor(R.color.text_secondary))
+            }
+            val seek = SeekBar(this).apply {
+                max = maximum - minimum
+                progress = (initial - minimum).coerceIn(0, max)
+                contentDescription = title
+            }
+            fun updateLabel(value: Int) {
+                label.text = "$title: $value"
+            }
+            updateLabel(initial)
+            brushControls.addView(label)
+            brushControls.addView(seek)
+            seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val value = progress + minimum
+                    updateLabel(value)
+                    if (fromUser && canEditPhoto()) {
+                        val masking = editingState.state.masking
+                        editingState.updateMasking(write(masking, value), title)
+                    }
+                }
+                override fun onStartTrackingTouch(bar: SeekBar?) {
+                    if (canEditPhoto()) editingState.beginGesture()
+                }
+                override fun onStopTrackingTouch(bar: SeekBar?) {
+                    if (canEditPhoto()) {
+                        editingState.endGesture()
+                        refreshHistory()
+                        syncUiState()
+                    }
+                }
+            })
+        }
+        val currentMasking = editingState.state.masking
+        addBrushControl(
+            "Brush Size", 5, 200, currentMasking.brushSize.toInt(),
+            { state, value -> state.copy(brushSize = value.toFloat()) }
+        )
+        addBrushControl(
+            "Feather", 0, 100, currentMasking.brushFeather.toInt(),
+            { state, value -> state.copy(brushFeather = value.toFloat()) }
+        )
+        addBrushControl(
+            "Flow", 1, 100, currentMasking.brushFlow.toInt(),
+            { state, value -> state.copy(brushFlow = value.toFloat()) }
         )
 
         var activeTool = "Brush"
@@ -1427,7 +1487,8 @@ class MainActivity : Activity() {
                                 sourceBitmap!!.width,
                                 sourceBitmap!!.height,
                                 x, y, masking.brushSize, masking.brushFlow.toInt(),
-                                erase = activeTool == "Eraser"
+                                erase = activeTool == "Eraser",
+                                feather = masking.brushFeather.toInt()
                             ),
                             "Paint Mask"
                         )
@@ -1440,7 +1501,8 @@ class MainActivity : Activity() {
                                 sourceBitmap!!.width,
                                 sourceBitmap!!.height,
                                 x, y, masking.brushSize, masking.brushFlow.toInt(),
-                                erase = activeTool == "Eraser"
+                                erase = activeTool == "Eraser",
+                                feather = masking.brushFeather.toInt()
                             ),
                             "Paint Mask"
                         )
@@ -2048,7 +2110,9 @@ class MainActivity : Activity() {
             filter = editingState.filter,
             colorGrading = editingState.state.colorGrading,
             sourceWidth = width,
-            sourceHeight = height
+            sourceHeight = height,
+            masking = editingState.state.masking,
+            effects = editingState.state.effects
         )
     }
 
@@ -2963,3 +3027,4 @@ class MainActivity : Activity() {
         const val LEGACY_STATE_REDO = "m2_redo"
     }
 }
+

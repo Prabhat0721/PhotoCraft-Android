@@ -38,7 +38,8 @@ data class MaskSelection(
         centerY: Float,
         radius: Float,
         flow: Int = 100,
-        erase: Boolean = false
+        erase: Boolean = false,
+        feather: Int = 50
     ): MaskSelection {
         val scaleX = width.toFloat() / sourceWidth.coerceAtLeast(1)
         val scaleY = height.toFloat() / sourceHeight.coerceAtLeast(1)
@@ -54,6 +55,9 @@ data class MaskSelection(
         val top = (mappedY - r).toInt().coerceAtLeast(0)
         val bottom = (mappedY + r).toInt().coerceAtMost(height - 1)
         val amount = flow.coerceIn(0, 100) * 255 / 100
+        val featherFraction = feather.coerceIn(0, 100) / 100f
+        val featherStart = r * (1f - featherFraction)
+        val featherWidth = (r - featherStart).coerceAtLeast(1f)
 
         for (y in top..bottom) {
             for (x in left..right) {
@@ -63,7 +67,12 @@ data class MaskSelection(
                 if (distance <= r) {
                     val index = y * width + x
                     val old = output[index].toInt() and 0xFF
-                    val strength = (amount * (1f - distance / r)).toInt()
+                    val falloff = if (distance <= featherStart) {
+                        1f
+                    } else {
+                        ((r - distance) / featherWidth).coerceIn(0f, 1f)
+                    }
+                    val strength = (amount * falloff).toInt()
                     val updated = if (erase) {
                         (old - strength).coerceAtLeast(0)
                     } else {
@@ -91,14 +100,17 @@ data class MaskLayer(
         y: Float,
         radius: Float,
         flow: Int,
-        erase: Boolean = false
+        erase: Boolean = false,
+        feather: Int = 50
     ): MaskLayer {
         require(sourceWidth > 0 && sourceHeight > 0)
         val current = selection
             ?: MaskSelection(sourceWidth, sourceHeight, ByteArray(sourceWidth * sourceHeight))
 
         return copy(
-            selection = current.paint(sourceWidth, sourceHeight, x, y, radius, flow, erase)
+            selection = current.paint(
+                sourceWidth, sourceHeight, x, y, radius, flow, erase, feather
+            )
         )
     }
 }
@@ -124,9 +136,12 @@ data class MaskingState(
         y: Float,
         radius: Float,
         flow: Int = 100,
-        erase: Boolean = false
+        erase: Boolean = false,
+        feather: Int = brushFeather.toInt()
     ): MaskingState {
-        val updated = selected().paint(sourceWidth, sourceHeight, x, y, radius, flow, erase)
+        val updated = selected().paint(
+            sourceWidth, sourceHeight, x, y, radius, flow, erase, feather
+        )
         return when (selectedMask) {
             MaskType.SUBJECT -> copy(subject = updated)
             MaskType.BACKGROUND -> copy(background = updated)
@@ -136,3 +151,4 @@ data class MaskingState(
     fun selectMask(type: MaskType): MaskingState =
         copy(selectedMask = type)
 }
+

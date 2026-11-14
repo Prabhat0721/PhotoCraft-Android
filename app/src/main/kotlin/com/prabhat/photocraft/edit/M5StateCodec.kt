@@ -4,7 +4,8 @@ import kotlin.math.roundToInt
 
 object M5StateCodec {
     const val LEGACY_VALUE_COUNT = 18
-    const val VALUE_COUNT = 53
+    const val COLOR_VALUE_COUNT = 53
+    const val VALUE_COUNT = 58
     private const val ADJUSTMENT_COUNT = 11
     private const val BASIS_POINT_SCALE = 10000f
 
@@ -36,13 +37,20 @@ object M5StateCodec {
             values[i++] = grade.luminance
         }
         values[i++] = state.colorGrading.balance
-        values[i] = state.colorGrading.blending
+        values[i++] = state.colorGrading.blending
+        val effects = state.effects
+        values[i++] = effects.sharpness
+        values[i++] = effects.texture
+        values[i++] = effects.details
+        values[i++] = effects.noiseReduction
+        values[i] = effects.vignette
         return values
     }
 
     fun decode(values: IntArray?): EditState? {
         if (values == null ||
-            (values.size != LEGACY_VALUE_COUNT && values.size != VALUE_COUNT)
+            (values.size != LEGACY_VALUE_COUNT &&
+                values.size != COLOR_VALUE_COUNT && values.size != VALUE_COUNT)
         ) return null
 
         return try {
@@ -63,7 +71,8 @@ object M5StateCodec {
             )
 
             var grading = ColorGradingSettings.NEUTRAL
-            if (values.size == VALUE_COUNT) {
+            var effects = PhotoEffects.NEUTRAL
+            if (values.size >= COLOR_VALUE_COUNT) {
                 var i = LEGACY_VALUE_COUNT
                 val adjustmentsByColor = HslColor.entries.associateWith {
                     HslAdjustment(
@@ -100,6 +109,16 @@ object M5StateCodec {
                     balance = values[i++],
                     blending = values[i]
                 )
+                i++
+                if (values.size == VALUE_COUNT) {
+                    effects = PhotoEffects(
+                        sharpness = values[i++],
+                        texture = values[i++],
+                        details = values[i++],
+                        noiseReduction = values[i++],
+                        vignette = values[i]
+                    )
+                }
             }
 
             EditState(
@@ -107,7 +126,8 @@ object M5StateCodec {
                 crop = crop,
                 cropRatio = ratio,
                 filter = filterSettings,
-                colorGrading = grading
+                colorGrading = grading,
+                effects = effects
             )
         } catch (_: IllegalArgumentException) {
             null
@@ -129,6 +149,7 @@ object M5StateCodec {
 
         val recordSize = when {
             values.size % VALUE_COUNT == 0 -> VALUE_COUNT
+            values.size % COLOR_VALUE_COUNT == 0 -> COLOR_VALUE_COUNT
             values.size % LEGACY_VALUE_COUNT == 0 -> LEGACY_VALUE_COUNT
             else -> return emptyList()
         }
@@ -148,3 +169,4 @@ object M5StateCodec {
     private fun toBasisPoints(value: Float): Int =
         (value * BASIS_POINT_SCALE).roundToInt().coerceIn(0, 10000)
 }
+

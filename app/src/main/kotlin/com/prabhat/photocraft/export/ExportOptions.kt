@@ -4,6 +4,7 @@ import com.prabhat.photocraft.edit.Adjustments
 import com.prabhat.photocraft.edit.CropSelection
 import com.prabhat.photocraft.edit.FilterSettings
 import com.prabhat.photocraft.edit.MaskingState
+import com.prabhat.photocraft.edit.PhotoEffects
 
 enum class ExportQuality(val jpegQuality: Int) {
     HIGH(95),
@@ -56,5 +57,7 @@ data class ExportRequest(
     val colorGrading: com.prabhat.photocraft.edit.ColorGradingSettings = com.prabhat.photocraft.edit.ColorGradingSettings.NEUTRAL,
     val sourceWidth: Int = 0,
     val sourceHeight: Int = 0,
-    val masking: MaskingState = MaskingState()
+    val masking: MaskingState = MaskingState(),
+    val effects: PhotoEffects = PhotoEffects.NEUTRAL
 )
+
