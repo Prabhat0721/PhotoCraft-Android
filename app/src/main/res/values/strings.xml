@@ -76,6 +76,10 @@
     <string name="crop_ratio_four_five">4:5 Portrait</string>
     <string name="crop_ratio_nine_sixteen">9:16 Portrait</string>
     <string name="crop_ratio_sixteen_nine">16:9 Landscape</string>
+    <string name="crop_ratio_three_two">3:2 Landscape</string>
+    <string name="crop_ratio_two_three">2:3 Portrait</string>
+    <string name="crop_ratio_four_three">4:3 Landscape</string>
+    <string name="crop_ratio_five_four">5:4 Landscape</string>
     <string name="crop_width_label">Crop width</string>
     <string name="crop_height_label">Crop height</string>
     <string name="crop_size_label">Crop size</string>

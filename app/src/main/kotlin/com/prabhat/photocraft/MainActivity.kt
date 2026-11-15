@@ -2852,6 +2852,10 @@ class MainActivity : Activity() {
         CropRatio.FOUR_FIVE -> R.string.crop_ratio_four_five
         CropRatio.NINE_SIXTEEN -> R.string.crop_ratio_nine_sixteen
         CropRatio.SIXTEEN_NINE -> R.string.crop_ratio_sixteen_nine
+        CropRatio.THREE_TWO -> R.string.crop_ratio_three_two
+        CropRatio.TWO_THREE -> R.string.crop_ratio_two_three
+        CropRatio.FOUR_THREE -> R.string.crop_ratio_four_three
+        CropRatio.FIVE_FOUR -> R.string.crop_ratio_five_four
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

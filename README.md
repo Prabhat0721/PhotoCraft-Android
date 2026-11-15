@@ -25,13 +25,25 @@ The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
 GitHub Actions builds the debug APK on pushes to `main` and on manual workflow dispatch. Download the `PhotoCraft-debug-APK` artifact from the workflow run.
 
-## Audit notes and remaining work
+## Integration audit and remaining work
 
-The editor already contains native equivalents for the core Frame Folk workspace, tabs, adjustment panels, comparison, crop, and export. Existing image-processing code is reused in `app/src/main/kotlin/com/prabhat/photocraft/edit`, with preview rendering in `image/PreviewRenderer.kt` and full-resolution output in `export/JpegExporter.kt`.
+The native implementation is kept in this repository. The checked-out project contains no Frame Folk source, and the referenced GitHub repository could not be fetched during this audit, so a file-by-file comparison or a claim of pixel-faithful UI parity is not possible here.
 
-This project is not yet a complete implementation of the full editor brief. RGB/tonal curves, rotation/flip/straighten, PNG export, the full requested crop-ratio set and complete detail controls are not implemented. Brush feather, size and flow are available in the masking panel. Presets and saved activity state preserve the current global effects, but do not yet preserve painted mask coverage or all mask settings. These gaps should be closed before describing the app as production-complete.
+| Area | PhotoCraft implementation |
+| --- | --- |
+| Native UI | Android Views in `app/src/main/res/layout/activity_main.xml`, wired by `MainActivity.kt`; no WebView |
+| Edit state and history | Central `EditState` and `EditingState`, with undo/redo and persisted snapshots |
+| Pixel processing | Light/color adjustments, HSL mixer, color grading, filters, effects and local-mask compositing in `edit/` |
+| Preview | Background-thread rendering and stale-request cancellation in `image/PreviewRenderer.kt` |
+| Export | Full-resolution tiled JPEG processing, crop and local-mask application in `export/JpegExporter.kt` |
+| Masks and presets | Subject/background selection, brush masks, local edits and serialized custom presets |
+| Delivery workflow | `.github/workflows` builds and uploads a debug APK on `main` pushes and manual dispatch |
+
+The crop ratio selector now includes the requested 1:1, 3:2, 2:3, 4:3, 5:4 and 16:9 presets, alongside the existing free, 4:5 and 9:16 options. New ratio values are appended to the enum so existing saved ordinal values remain valid.
+
+This is still not a complete implementation of the full editor brief. RGB/tonal curves; rotate, flip and straighten; PNG export; configurable detail radius/detail/masking; and the requested color-grading wheels are not implemented. The current three-way grading controls use hue, saturation amount and luminance sliders rather than color wheels. Brush size, feather and flow are available, but preset and activity-state serialization do not preserve painted mask coverage and every mask setting. Frame Folk source comparison and device-side visual verification also remain outstanding.
 
 ## Verification
 
-The debug APK was built locally with JDK 17 and Android SDK 36. No device-side interaction or export verification has been performed in this environment.
+The repository includes Kotlin engine tests and a GitHub Actions APK workflow. This environment had JDK 17 but no `gradle` or `kotlinc` executable, so a fresh build or test run could not be completed for this update. No device-side interaction or export verification has been performed here.
 

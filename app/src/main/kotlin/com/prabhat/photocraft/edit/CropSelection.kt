@@ -65,7 +65,12 @@ enum class CropRatio(val widthToHeight: Float?) {
     SQUARE(1f),
     FOUR_FIVE(4f / 5f),
     NINE_SIXTEEN(9f / 16f),
-    SIXTEEN_NINE(16f / 9f);
+    SIXTEEN_NINE(16f / 9f),
+    // Keep new values at the end: ratio ordinals are persisted in edit-state codecs.
+    THREE_TWO(3f / 2f),
+    TWO_THREE(2f / 3f),
+    FOUR_THREE(4f / 3f),
+    FIVE_FOUR(5f / 4f);
 
     val isFixed: Boolean
         get() = widthToHeight != null
