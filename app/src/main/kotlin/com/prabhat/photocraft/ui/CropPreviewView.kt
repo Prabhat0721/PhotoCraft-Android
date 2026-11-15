@@ -25,6 +25,7 @@ class CropPreviewView @JvmOverloads constructor(
     private var bitmap: Bitmap? = null
     private var crop = CropSelection.FULL
     private val sourceRect = Rect()
+    private val overlayRect = Rect()
     private val destinationRect = RectF()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val overlayPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -133,9 +134,8 @@ class CropPreviewView @JvmOverloads constructor(
             val ot = floor(crop.top * overlay.height).toInt().coerceIn(0, overlay.height - 1)
             val oright = ceil(crop.right * overlay.width).toInt().coerceIn(ol + 1, overlay.width)
             val obottom = ceil(crop.bottom * overlay.height).toInt().coerceIn(ot + 1, overlay.height)
-            canvas.drawBitmap(
-                overlay, Rect(ol, ot, oright, obottom), destinationRect, overlayPaint
-            )
+            overlayRect.set(ol, ot, oright, obottom)
+            canvas.drawBitmap(overlay, overlayRect, destinationRect, overlayPaint)
         }
     }
 }

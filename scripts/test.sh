@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -195,3 +195,17 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
 
 printf 'Running photo-effects history tests...\n'
 java -Xms32m -Xmx256m -jar "$WORK/photo-effects-history-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
+    "$ROOT/tests/MaskingStateTests.kt" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/masking-state-tests.jar"
+
+printf 'Running masking layer and combine-mode tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/masking-state-tests.jar"

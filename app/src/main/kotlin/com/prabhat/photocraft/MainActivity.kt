@@ -32,6 +32,8 @@ import android.widget.Spinner
 import android.widget.TextView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import com.prabhat.photocraft.edit.SelfieMaskSegmenter
 import com.prabhat.photocraft.edit.Adjustment
@@ -169,6 +171,7 @@ class MainActivity : Activity() {
     private var lastHistoryRevision = -1
     private var sourceBitmap: Bitmap? = null
     private val selfieMaskSegmenter = SelfieMaskSegmenter()
+    private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var adjustedBitmap: Bitmap? = null
     private var currentDisplayName: String? = null
     private var selectedUri: Uri? = null
@@ -1421,7 +1424,7 @@ class MainActivity : Activity() {
             }
 
             statusText.text = "Detecting subject..."
-            CoroutineScope(Dispatchers.Main).launch {
+            activityScope.launch {
                 try {
                     val detected = selfieMaskSegmenter.createMask(bitmap)
                     val inverse = ByteArray(detected.coverage.size) { i ->
@@ -3101,6 +3104,8 @@ class MainActivity : Activity() {
         }
         backCallback = null
         pendingExportRequest = null
+        activityScope.cancel()
+        selfieMaskSegmenter.close()
         exporter.close()
         loader.close()
         renderer.close()
