@@ -228,7 +228,7 @@
                             android:fontFamily="sans-serif"
                             android:maxLines="1"
                             android:textColor="#E6FFFFFF"
-                            android:textSize="10sp" />
+                            android:textSize="11sp" />
 
                         <TextView
                             android:id="@+id/editedBadge"
@@ -244,7 +244,7 @@
                             android:paddingBottom="3dp"
                             android:text="@string/edited_badge"
                             android:textColor="@color/accent"
-                            android:textSize="8sp"
+                            android:textSize="11sp"
                             android:textStyle="bold"
                             android:visibility="gone" />
 
@@ -258,7 +258,7 @@
                             android:visibility="gone" />
                     </LinearLayout>
 
-                    <ImageButton
+                    <com.prabhat.photocraft.ui.AccessibleImageButton
                         android:id="@+id/compareButton"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
@@ -373,7 +373,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="18dp"
                                 android:accessibilityHeading="true"
-                                android:text="HSL Color Mixer" />
+                                android:text="@string/hsl_mixer_title" />
 
                             <LinearLayout
                                 android:id="@+id/hslControls"
@@ -387,7 +387,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="18dp"
                                 android:accessibilityHeading="true"
-                                android:text="Color Grading" />
+                                android:text="@string/color_grading_title" />
 
                             <LinearLayout
                                 android:id="@+id/gradingControls"
@@ -408,14 +408,14 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:accessibilityHeading="true"
-                                android:text="Masking" />
+                                android:text="@string/masking_title" />
 
                             <TextView
                                 style="@style/PhotoCraftFieldLabel"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="12dp"
-                                android:text="Build a stack of masks. Select a layer, paint or erase on the photo, and adjust that region independently." />
+                                android:text="@string/masking_description" />
 
                             <LinearLayout
                                 android:id="@+id/maskLayerList"
@@ -433,19 +433,19 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="+ Brush" />
+                                    android:text="@string/mask_add_brush" />
                                 <Button
                                     android:id="@+id/maskDuplicateButton"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Duplicate" />
+                                    android:text="@string/mask_duplicate" />
                                 <Button
                                     android:id="@+id/maskDeleteButton"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Clear / Delete" />
+                                    android:text="@string/mask_clear_delete" />
                             </LinearLayout>
 
                             <LinearLayout
@@ -457,25 +457,25 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Linear" />
+                                    android:text="@string/mask_linear" />
                                 <Button
                                     android:id="@+id/maskRadialButton"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Radial" />
+                                    android:text="@string/mask_radial" />
                                 <Button
                                     android:id="@+id/maskColorRangeButton"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Color Range" />
+                                    android:text="@string/mask_color_range" />
                                 <Button
                                     android:id="@+id/maskLuminanceButton"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Luminance" />
+                                    android:text="@string/mask_luminance" />
                             </LinearLayout>
                         
                             <LinearLayout
@@ -489,14 +489,14 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Subject" />
+                                    android:text="@string/mask_subject" />
 
                                 <Button
                                     android:id="@+id/maskBackgroundButton"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Background" />
+                                    android:text="@string/mask_background" />
                             </LinearLayout>
 
                             <LinearLayout
@@ -509,21 +509,21 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Brush" />
+                                    android:text="@string/mask_brush" />
 
                                 <Button
                                     android:id="@+id/maskEraserButton"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Eraser" />
+                                    android:text="@string/mask_eraser" />
 
                                 <Button
                                     android:id="@+id/maskInvertButton"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Invert" />
+                                    android:text="@string/mask_invert" />
                             </LinearLayout>
 
                             <LinearLayout
@@ -541,13 +541,13 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Mode: Replace" />
+                                    android:text="@string/mask_mode_replace" />
                                 <Button
                                     android:id="@+id/maskApplyCombineButton"
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Apply to Previous" />
+                                    android:text="@string/mask_apply_previous" />
                             </LinearLayout>
 
                             <TextView
@@ -556,14 +556,14 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="8dp"
-                                android:text="Select a mask to begin." />
+                                android:text="@string/mask_select_hint" />
 
                             <TextView
                                 style="@style/PhotoCraftSectionLabel"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="12dp"
-                                android:text="ACTIVE MASK ADJUSTMENTS" />
+                                android:text="@string/mask_active_adjustments" />
 
                             <LinearLayout
                                 android:id="@+id/maskLayerAdjustments"
@@ -592,7 +592,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="14dp"
                                 android:accessibilityHeading="true"
-                                android:text="Effects" />
+                                android:text="@string/category_effects_heading" />
 
                             <LinearLayout
                                 android:id="@+id/effectsControls"
@@ -843,7 +843,7 @@
                     android:text="@string/category_light"
                     android:textAllCaps="false"
                     android:textColor="@color/compare_option_text"
-                    android:textSize="10sp" />
+                    android:textSize="11sp" />
 
                 <RadioButton
                     android:id="@+id/colorCategory"
@@ -865,7 +865,7 @@
                     android:text="@string/category_color"
                     android:textAllCaps="false"
                     android:textColor="@color/compare_option_text"
-                    android:textSize="10sp" />
+                    android:textSize="11sp" />
 
                 <RadioButton
                     android:id="@+id/effectsCategory"
@@ -887,7 +887,7 @@
                     android:text="@string/category_effects"
                     android:textAllCaps="false"
                     android:textColor="@color/compare_option_text"
-                    android:textSize="10sp" />
+                    android:textSize="11sp" />
 
                 <RadioButton
                     android:id="@+id/maskingCategory"
@@ -903,10 +903,10 @@
                     android:includeFontPadding="false"
                     android:minHeight="0dp"
                     android:minWidth="0dp"
-                    android:text="Masking"
+                    android:text="@string/category_masking"
                     android:textAllCaps="false"
                     android:textColor="@color/compare_option_text"
-                    android:textSize="10sp" android:drawableTop="@drawable/ic_masking"
+                    android:textSize="11sp" android:drawableTop="@drawable/ic_masking"
                     android:drawablePadding="3dp"
                     android:drawableTint="@color/compare_option_text"
                     />
@@ -931,7 +931,7 @@
                     android:text="@string/category_crop"
                     android:textAllCaps="false"
                     android:textColor="@color/compare_option_text"
-                    android:textSize="10sp" />
+                    android:textSize="11sp" />
             </RadioGroup>
         </LinearLayout>
     </LinearLayout>
@@ -1040,6 +1040,7 @@
                             android:layout_height="48dp"
                             android:layout_marginTop="12dp"
                             android:hint="@string/preset_name_hint"
+                            android:importantForAutofill="no"
                             android:imeOptions="actionDone"
                             android:inputType="textCapSentences"
                             android:maxLength="40"

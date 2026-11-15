@@ -64,7 +64,8 @@ class CropPreviewView @JvmOverloads constructor(
     }
 
     init {
-        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        isClickable = true
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
     }
 
     fun setBitmap(bitmap: Bitmap?) {
@@ -99,7 +100,16 @@ class CropPreviewView @JvmOverloads constructor(
             (event.y - destinationRect.top) / destinationRect.height() * sourceRect.height())
             .coerceIn(sourceRect.top.toFloat(), sourceRect.bottom.toFloat() - 1f)
 
-        return listener(sx, sy, event.actionMasked)
+        val handled = listener(sx, sy, event.actionMasked)
+        if (handled && event.actionMasked == MotionEvent.ACTION_UP) {
+            performClick()
+        }
+        return handled
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
     }
 
     override fun onDraw(canvas: Canvas) {

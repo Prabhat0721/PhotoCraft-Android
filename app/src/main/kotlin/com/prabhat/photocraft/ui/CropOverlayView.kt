@@ -172,6 +172,7 @@ class CropOverlayView @JvmOverloads constructor(
                     return false
                 }
                 finishCrop(cancelled = false)
+                performClick()
                 return true
             }
 
@@ -198,7 +199,6 @@ class CropOverlayView @JvmOverloads constructor(
             listener?.onCropCancelled()
         } else {
             listener?.onCropStopped()
-            performClick()
         }
     }
 

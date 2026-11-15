@@ -79,8 +79,12 @@ class AdjustmentRowView @JvmOverloads constructor(
                 listener?.onAdjustmentStopped(this@AdjustmentRowView)
             }
         })
-        seekBar.setOnTouchListener { _, event ->
+        seekBar.setOnTouchListener { view, event ->
             resetDetector.onTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_UP) {
+                view.performClick()
+            }
+            false
         }
     }
 

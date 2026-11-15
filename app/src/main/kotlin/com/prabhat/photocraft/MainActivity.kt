@@ -21,7 +21,6 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
@@ -70,6 +69,7 @@ import com.prabhat.photocraft.preset.Preset
 import com.prabhat.photocraft.preset.PresetName
 import com.prabhat.photocraft.preset.PresetStore
 import com.prabhat.photocraft.ui.AdjustmentRowView
+import com.prabhat.photocraft.ui.AccessibleImageButton
 import com.prabhat.photocraft.ui.AdaptivePreviewLayout
 import com.prabhat.photocraft.ui.CropOverlayView
 import com.prabhat.photocraft.ui.CropPreviewView
@@ -96,7 +96,7 @@ class MainActivity : Activity() {
     private lateinit var previewCard: AdaptivePreviewLayout
     private lateinit var previewImage: CropPreviewView
     private lateinit var cropOverlay: CropOverlayView
-    private lateinit var compareButton: ImageButton
+    private lateinit var compareButton: AccessibleImageButton
     private lateinit var loadOverlay: View
     private lateinit var previewMeta: TextView
     private lateinit var editedBadge: TextView
@@ -184,6 +184,7 @@ class MainActivity : Activity() {
     private var pendingExportRequest: ExportRequest? = null
     private var loadingPhoto = false
     private var compareHeld = false
+    private var compareTouchInProgress = false
     private var selectedCategory = EditorCategory.LIGHT
     private var selectedQuality = ExportQuality.HIGH
     private var selectedSize = ExportSize.ORIGINAL
@@ -350,7 +351,13 @@ class MainActivity : Activity() {
                         adjustments = selectedLayer.adjustments.copy(adjustments = updatedAdjustments)
                     )
                     val updatedMasking = masking.updateSelected(updatedLayer)
-                    if (editingState.updateMasking(updatedMasking, "Local Mask Adjustment")) {
+                    if (editingState.updateMasking(
+                            updatedMasking,
+                            getString(R.string.history_local_mask_adjustment,
+                                localizedMaskName(selectedLayer),
+                                getString(labelFor(adjustment)))
+                        )
+                    ) {
                         clearExportStatus()
                         requestPreviewRender()
                         syncUiState()
@@ -544,6 +551,69 @@ class MainActivity : Activity() {
 
     private enum class GradeRegion { SHADOWS, MIDTONES, HIGHLIGHTS }
 
+    private fun localizedHslColor(color: HslColor): String = getString(
+        when (color) {
+            HslColor.RED -> R.string.hsl_red
+            HslColor.ORANGE -> R.string.hsl_orange
+            HslColor.YELLOW -> R.string.hsl_yellow
+            HslColor.GREEN -> R.string.hsl_green
+            HslColor.CYAN -> R.string.hsl_cyan
+            HslColor.BLUE -> R.string.hsl_blue
+            HslColor.PURPLE -> R.string.hsl_purple
+            HslColor.MAGENTA -> R.string.hsl_magenta
+        }
+    )
+
+    private fun localizedGradeRegion(region: GradeRegion): String = getString(
+        when (region) {
+            GradeRegion.SHADOWS -> R.string.grade_shadows
+            GradeRegion.MIDTONES -> R.string.grade_midtones
+            GradeRegion.HIGHLIGHTS -> R.string.grade_highlights
+        }
+    )
+
+    private fun localizedMaskName(layer: com.prabhat.photocraft.edit.MaskLayer): String =
+        localizedMaskType(layer.type)
+
+    private fun localizedMaskType(type: com.prabhat.photocraft.edit.MaskType): String =
+        getString(
+            when (type) {
+                com.prabhat.photocraft.edit.MaskType.SUBJECT -> R.string.mask_layer_subject
+                com.prabhat.photocraft.edit.MaskType.BACKGROUND -> R.string.mask_layer_background
+                com.prabhat.photocraft.edit.MaskType.BRUSH -> R.string.mask_layer_brush
+                com.prabhat.photocraft.edit.MaskType.LINEAR_GRADIENT -> R.string.mask_layer_linear_gradient
+                com.prabhat.photocraft.edit.MaskType.RADIAL_GRADIENT -> R.string.mask_layer_radial_gradient
+                com.prabhat.photocraft.edit.MaskType.COLOR_RANGE -> R.string.mask_layer_color_range
+                com.prabhat.photocraft.edit.MaskType.LUMINANCE_RANGE -> R.string.mask_layer_luminance_range
+                com.prabhat.photocraft.edit.MaskType.SKY -> R.string.mask_layer_sky
+                com.prabhat.photocraft.edit.MaskType.LANDSCAPE -> R.string.mask_layer_landscape
+                com.prabhat.photocraft.edit.MaskType.PEOPLE -> R.string.mask_layer_people
+                com.prabhat.photocraft.edit.MaskType.OBJECT -> R.string.mask_layer_object
+            }
+        )
+
+    private fun localizedMaskTool(tool: String): String = getString(
+        when (tool) {
+            "Eraser" -> R.string.mask_eraser
+            "Linear Gradient" -> R.string.mask_tool_linear_gradient
+            "Radial Gradient" -> R.string.mask_tool_radial_gradient
+            "Color Range" -> R.string.mask_tool_color_range
+            "Luminance Range" -> R.string.mask_tool_luminance_range
+            else -> R.string.mask_brush
+        }
+    )
+
+    private fun localizedMaskCombineMode(
+        mode: com.prabhat.photocraft.edit.MaskCombineMode
+    ): String = getString(
+        when (mode) {
+            com.prabhat.photocraft.edit.MaskCombineMode.REPLACE -> R.string.mask_combine_replace
+            com.prabhat.photocraft.edit.MaskCombineMode.ADD -> R.string.mask_combine_add
+            com.prabhat.photocraft.edit.MaskCombineMode.SUBTRACT -> R.string.mask_combine_subtract
+            com.prabhat.photocraft.edit.MaskCombineMode.INTERSECT -> R.string.mask_combine_intersect
+        }
+    )
+
     private fun setupAdvancedControls() {
         hslControls.removeAllViews()
         gradingControls.removeAllViews()
@@ -553,9 +623,10 @@ class MainActivity : Activity() {
         advancedLabelTitles.clear()
 
         for (color in HslColor.entries) {
-            val title = color.name.lowercase().replaceFirstChar { it.uppercase() }
+            val title = localizedHslColor(color)
             addAdvancedSlider(
-                hslControls, "hsl_${color.name}_hue", "$title · Hue",
+                hslControls, "hsl_${color.name}_hue",
+                getString(R.string.advanced_slider_title, title, getString(R.string.advanced_hue)),
                 -180, 180, editingState.state.colorGrading.hsl.adjustment(color).hue
             ) { value ->
                 val state = editingState.state.colorGrading
@@ -565,7 +636,8 @@ class MainActivity : Activity() {
                 ))
             }
             addAdvancedSlider(
-                hslControls, "hsl_${color.name}_sat", "$title · Saturation",
+                hslControls, "hsl_${color.name}_sat",
+                getString(R.string.advanced_slider_title, title, getString(R.string.advanced_saturation)),
                 -100, 100, editingState.state.colorGrading.hsl.adjustment(color).saturation
             ) { value ->
                 val state = editingState.state.colorGrading
@@ -575,7 +647,8 @@ class MainActivity : Activity() {
                 ))
             }
             addAdvancedSlider(
-                hslControls, "hsl_${color.name}_lum", "$title · Luminance",
+                hslControls, "hsl_${color.name}_lum",
+                getString(R.string.advanced_slider_title, title, getString(R.string.advanced_luminance)),
                 -100, 100, editingState.state.colorGrading.hsl.adjustment(color).luminance
             ) { value ->
                 val state = editingState.state.colorGrading
@@ -588,23 +661,26 @@ class MainActivity : Activity() {
 
         for (region in GradeRegion.entries) {
             val initial = gradeFor(editingState.state.colorGrading, region)
-            val title = region.name.lowercase().replaceFirstChar { it.uppercase() }
+            val title = localizedGradeRegion(region)
             addAdvancedSlider(
-                gradingControls, "grade_${region.name}_hue", "$title · Hue",
+                gradingControls, "grade_${region.name}_hue",
+                getString(R.string.advanced_slider_title, title, getString(R.string.advanced_hue)),
                 -180, 180, initial.hue
             ) { value ->
                 val state = editingState.state.colorGrading
                 updateColorGrading(withGrade(state, region, gradeFor(state, region).copy(hue = value)))
             }
             addAdvancedSlider(
-                gradingControls, "grade_${region.name}_amount", "$title · Amount",
+                gradingControls, "grade_${region.name}_amount",
+                getString(R.string.advanced_slider_title, title, getString(R.string.advanced_amount)),
                 0, 100, initial.amount
             ) { value ->
                 val state = editingState.state.colorGrading
                 updateColorGrading(withGrade(state, region, gradeFor(state, region).copy(amount = value)))
             }
             addAdvancedSlider(
-                gradingControls, "grade_${region.name}_lum", "$title · Luminance",
+                gradingControls, "grade_${region.name}_lum",
+                getString(R.string.advanced_slider_title, title, getString(R.string.advanced_luminance)),
                 -100, 100, initial.luminance
             ) { value ->
                 val state = editingState.state.colorGrading
@@ -613,44 +689,44 @@ class MainActivity : Activity() {
         }
 
         addAdvancedSlider(
-            gradingControls, "grade_balance", "Balance",
+            gradingControls, "grade_balance", getString(R.string.advanced_balance),
             -100, 100, editingState.state.colorGrading.balance
         ) { value ->
             updateColorGrading(editingState.state.colorGrading.copy(balance = value))
         }
         addAdvancedSlider(
-            gradingControls, "grade_blending", "Blending",
+            gradingControls, "grade_blending", getString(R.string.advanced_blending),
             0, 100, editingState.state.colorGrading.blending
         ) { value ->
             updateColorGrading(editingState.state.colorGrading.copy(blending = value))
         }
 
         addAdvancedSlider(
-            effectsControls, "effect_texture", "Texture",
+            effectsControls, "effect_texture", getString(R.string.advanced_texture),
             -100, 100, editingState.state.effects.texture
         ) { value ->
             updateEffects(editingState.state.effects.copy(texture = value))
         }
         addAdvancedSlider(
-            effectsControls, "effect_sharpness", "Sharpness",
+            effectsControls, "effect_sharpness", getString(R.string.advanced_sharpness),
             -100, 100, editingState.state.effects.sharpness
         ) { value ->
             updateEffects(editingState.state.effects.copy(sharpness = value))
         }
         addAdvancedSlider(
-            effectsControls, "effect_details", "Details",
+            effectsControls, "effect_details", getString(R.string.advanced_details),
             -100, 100, editingState.state.effects.details
         ) { value ->
             updateEffects(editingState.state.effects.copy(details = value))
         }
         addAdvancedSlider(
-            effectsControls, "effect_vignette", "Vignette",
+            effectsControls, "effect_vignette", getString(R.string.advanced_vignette),
             -100, 100, editingState.state.effects.vignette
         ) { value ->
             updateEffects(editingState.state.effects.copy(vignette = value))
         }
         addAdvancedSlider(
-            effectsControls, "effect_noise", "Noise Reduction",
+            effectsControls, "effect_noise", getString(R.string.advanced_noise_reduction),
             -100, 100, editingState.state.effects.noiseReduction
         ) { value ->
             updateEffects(editingState.state.effects.copy(noiseReduction = value))
@@ -679,7 +755,7 @@ class MainActivity : Activity() {
         val seekBar = SeekBar(this).apply {
             this.max = maximum - minimum
             progress = (initialValue - minimum).coerceIn(0, maximum - minimum)
-            contentDescription = title
+            contentDescription = getString(R.string.advanced_slider_description, title)
         }
         advancedSeekBars[key] = seekBar
         advancedLabels[key] = label
@@ -699,7 +775,7 @@ class MainActivity : Activity() {
 
         fun currentValue(): Int = seekBar.progress + minimum
         fun showValue(value: Int) {
-            label.text = "$title: $value"
+            label.text = getString(R.string.advanced_slider_value, title, value)
         }
         showValue(initialValue)
 
@@ -762,7 +838,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateColorGrading(settings: ColorGradingSettings) {
-        if (editingState.updateColorGrading(settings, "Color Grading / HSL")) {
+        if (editingState.updateColorGrading(settings, getString(R.string.history_color_grading))) {
             clearExportStatus()
             requestPreviewRender()
             syncUiState()
@@ -770,7 +846,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateEffects(effects: PhotoEffects) {
-        if (editingState.updateEffects(effects, "Photo Effects")) {
+        if (editingState.updateEffects(effects, getString(R.string.history_photo_effects))) {
             clearExportStatus()
             requestPreviewRender()
             syncUiState()
@@ -786,7 +862,11 @@ class MainActivity : Activity() {
             val bar = advancedSeekBars[key] ?: return
             val safe = (value - minimum).coerceIn(0, bar.max)
             if (bar.progress != safe) bar.progress = safe
-            advancedLabels[key]?.text = "${advancedLabelTitles[key] ?: key}: $value"
+            advancedLabels[key]?.text = getString(
+                R.string.advanced_slider_value,
+                advancedLabelTitles[key] ?: key,
+                value
+            )
         }
 
         for (color in HslColor.entries) {
@@ -1205,12 +1285,19 @@ class MainActivity : Activity() {
             val seek = SeekBar(this).apply {
                 max = 200
                 progress = initial + 100
-                    contentDescription = "${initialLayer.name} ${adjustment.name}"
+                contentDescription = getString(
+                    R.string.mask_local_adjustment_description,
+                    localizedMaskName(initialLayer),
+                    getString(labelFor(adjustment))
+                )
             }
 
             fun showValue(value: Int) {
-                label.text = "${adjustment.name.lowercase()
-                    .replaceFirstChar { it.uppercase() }}: $value"
+                label.text = getString(
+                    R.string.advanced_slider_value,
+                    getString(labelFor(adjustment)),
+                    value
+                )
             }
             showValue(initial)
 
@@ -1235,7 +1322,12 @@ class MainActivity : Activity() {
                     val updated = current.updateSelected(updatedLayer)
 
                     editingState.updateMasking(
-                        updated, "Local ${initialLayer.name} ${adjustment.name}"
+                        updated,
+                        getString(
+                            R.string.history_local_mask_adjustment,
+                            localizedMaskName(initialLayer),
+                            getString(labelFor(adjustment))
+                        )
                     )
                     clearExportStatus()
                     syncUiState()
@@ -1264,13 +1356,13 @@ class MainActivity : Activity() {
             ))
         }
 
-        addGroupTitle("LIGHT")
+        addGroupTitle(getString(R.string.section_light))
         com.prabhat.photocraft.edit.Adjustment.values()
             .filter { it.group ==
                 com.prabhat.photocraft.edit.AdjustmentGroup.LIGHT }
             .forEach { addAdjustment(it) }
 
-        addGroupTitle("COLOR")
+        addGroupTitle(getString(R.string.section_color))
         com.prabhat.photocraft.edit.Adjustment.values()
             .filter { it.group ==
                 com.prabhat.photocraft.edit.AdjustmentGroup.COLOR }
@@ -1308,7 +1400,7 @@ class MainActivity : Activity() {
                 contentDescription = title
             }
             fun updateLabel(value: Int) {
-                label.text = "$title: $value"
+                label.text = getString(R.string.slider_value, title, value)
             }
             updateLabel(initial)
             brushControls.addView(label)
@@ -1336,15 +1428,15 @@ class MainActivity : Activity() {
         }
         val currentMasking = editingState.state.masking
         addBrushControl(
-            "Brush Size", 5, 200, currentMasking.brushSize.toInt(),
+            getString(R.string.mask_brush_size), 5, 200, currentMasking.brushSize.toInt(),
             { state, value -> state.copy(brushSize = value.toFloat()) }
         )
         addBrushControl(
-            "Feather", 0, 100, currentMasking.brushFeather.toInt(),
+            getString(R.string.mask_feather), 0, 100, currentMasking.brushFeather.toInt(),
             { state, value -> state.copy(brushFeather = value.toFloat()) }
         )
         addBrushControl(
-            "Flow", 1, 100, currentMasking.brushFlow.toInt(),
+            getString(R.string.mask_flow), 1, 100, currentMasking.brushFlow.toInt(),
             { state, value -> state.copy(brushFlow = value.toFloat()) }
         )
 
@@ -1354,27 +1446,50 @@ class MainActivity : Activity() {
         fun refreshMaskStatus() {
             val masking = editingState.state.masking
             val layer = masking.selected()
-            statusText.text = "${layer.name} • Tool: $activeTool • " +
-                if (layer.selection == null) "No selection yet" else "Selection ready"
+            statusText.text = getString(
+                R.string.mask_status,
+                localizedMaskName(layer),
+                localizedMaskTool(activeTool),
+                getString(
+                    if (layer.selection == null) R.string.mask_no_selection
+                    else R.string.mask_selection_ready
+                )
+            )
             findViewById<Button>(R.id.maskCombineModeButton).text =
-                "Mode: ${layer.combineMode.name.lowercase().replaceFirstChar { it.uppercase() }}"
+                getString(R.string.mask_mode, localizedMaskCombineMode(layer.combineMode))
             layerList.removeAllViews()
             masking.layers.forEach { item ->
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 val select = Button(this).apply {
-                    text = "${if (item.id == layer.id) "● " else ""}${item.name}"
+                    text = localizedMaskName(item)
                     isAllCaps = false
+                    isSelected = item.id == layer.id
+                    contentDescription = getString(
+                        if (isSelected) R.string.mask_selected_layer
+                        else R.string.mask_layer_description,
+                        localizedMaskName(item)
+                    )
                     setOnClickListener {
-                        editingState.updateMasking(masking.selectLayer(item.id), "Select Mask")
+                        editingState.updateMasking(
+                            masking.selectLayer(item.id),
+                            getString(R.string.history_select_mask)
+                        )
                         setupLocalMaskAdjustmentControls(layerAdjustments)
                         refreshMaskStatus()
                     }
                 }
                 val visibility = Button(this).apply {
-                    text = if (item.enabled) "◉" else "○"
-                    contentDescription = if (item.enabled) "Hide ${item.name}" else "Show ${item.name}"
+                    text = if (item.enabled) "●" else "○"
+                    contentDescription = getString(
+                        if (item.enabled) R.string.mask_hide_layer else R.string.mask_show_layer,
+                        localizedMaskName(item)
+                    )
                     setOnClickListener {
-                        editingState.updateMasking(masking.updateSelected(item.copy(enabled = !item.enabled)).selectLayer(layer.id), "Toggle Mask Visibility")
+                        editingState.updateMasking(
+                            masking.updateSelected(item.copy(enabled = !item.enabled))
+                                .selectLayer(layer.id),
+                            getString(R.string.history_toggle_mask_visibility)
+                        )
                         refreshMaskStatus()
                     }
                 }
@@ -1392,7 +1507,7 @@ class MainActivity : Activity() {
         fun autoSelectMask(type: com.prabhat.photocraft.edit.MaskType) {
             val bitmap = sourceBitmap
             if (bitmap == null) {
-                statusText.text = "Open a photo first"
+                statusText.setText(R.string.mask_open_photo_first)
                 return
             }
 
@@ -1411,7 +1526,10 @@ class MainActivity : Activity() {
                     subject = current.subject.copy(selection = subject, inverted = false),
                     background = current.background.copy(selection = background, inverted = false)
                 ).selectLayer(targetId)
-                editingState.updateMasking(updated, "Auto Select $type")
+                editingState.updateMasking(
+                    updated,
+                    getString(R.string.history_auto_select_mask, localizedMaskType(type))
+                )
                 refreshMaskStatus()
                 syncUiState()
             }
@@ -1423,7 +1541,7 @@ class MainActivity : Activity() {
                 return
             }
 
-            statusText.text = "Detecting subject..."
+            statusText.setText(R.string.mask_detecting_subject)
             activityScope.launch {
                 try {
                     val detected = selfieMaskSegmenter.createMask(bitmap)
@@ -1441,11 +1559,17 @@ class MainActivity : Activity() {
                             selection = background, inverted = false
                         )
                     ).selectLayer(if (type == com.prabhat.photocraft.edit.MaskType.SUBJECT) "subject" else "background")
-                    editingState.updateMasking(latest, "Auto Select $type")
+                    editingState.updateMasking(
+                        latest,
+                        getString(R.string.history_auto_select_mask, localizedMaskType(type))
+                    )
                     refreshMaskStatus()
                     syncUiState()
                 } catch (error: Exception) {
-                    statusText.text = "Subject detection failed: ${error.message ?: "try again"}"
+                    statusText.text = getString(
+                        R.string.mask_detection_failed,
+                        error.message ?: getString(R.string.mask_try_again)
+                    )
                 }
             }
         }
@@ -1489,7 +1613,7 @@ class MainActivity : Activity() {
             val layer = masking.selected()
             val updatedLayer = layer.copy(inverted = !layer.inverted)
             val updatedMasking = masking.updateSelected(updatedLayer)
-            editingState.updateMasking(updatedMasking, "Invert Mask")
+            editingState.updateMasking(updatedMasking, getString(R.string.history_invert_mask))
             refreshMaskStatus()
             syncUiState()
         }
@@ -1499,32 +1623,38 @@ class MainActivity : Activity() {
             val next = modes[(modes.indexOf(masking.selected().combineMode) + 1) % modes.size]
             editingState.updateMasking(
                 masking.updateSelected(masking.selected().copy(combineMode = next)),
-                "Mask Combine Mode"
+                getString(R.string.history_mask_combine_mode)
             )
-            (it as Button).text = "Mode: ${next.name.lowercase().replaceFirstChar { c -> c.uppercase() }}"
+            (it as Button).text = getString(
+                R.string.mask_mode,
+                localizedMaskCombineMode(next)
+            )
         }
         findViewById<Button>(R.id.maskApplyCombineButton).setOnClickListener {
             val masking = editingState.state.masking
-            editingState.updateMasking(masking.combineSelectedWithPrevious(), "Combine Masks")
+            editingState.updateMasking(
+                masking.combineSelectedWithPrevious(),
+                getString(R.string.history_combine_masks)
+            )
             refreshMaskStatus()
             syncUiState()
         }
 
         findViewById<Button>(R.id.maskAddButton).setOnClickListener {
             val updated = editingState.state.masking.addLayer()
-            editingState.updateMasking(updated, "Add Brush Mask")
+            editingState.updateMasking(updated, getString(R.string.history_add_brush_mask))
             setupLocalMaskAdjustmentControls(layerAdjustments)
             refreshMaskStatus()
         }
         findViewById<Button>(R.id.maskDuplicateButton).setOnClickListener {
             val updated = editingState.state.masking.duplicateSelected()
-            editingState.updateMasking(updated, "Duplicate Mask")
+            editingState.updateMasking(updated, getString(R.string.history_duplicate_mask))
             setupLocalMaskAdjustmentControls(layerAdjustments)
             refreshMaskStatus()
         }
         findViewById<Button>(R.id.maskDeleteButton).setOnClickListener {
             val updated = editingState.state.masking.deleteSelected()
-            editingState.updateMasking(updated, "Clear or Delete Mask")
+            editingState.updateMasking(updated, getString(R.string.history_delete_mask))
             setupLocalMaskAdjustmentControls(layerAdjustments)
             refreshMaskStatus()
         }
@@ -1610,7 +1740,13 @@ class MainActivity : Activity() {
                                 feather = masking.brushFeather.toInt()
                             )
                         }
-                        if (updated != null) editingState.updateMasking(updated, "Create $activeTool")
+                        if (updated != null) editingState.updateMasking(
+                            updated,
+                            getString(
+                                R.string.history_create_mask_tool,
+                                localizedMaskTool(activeTool)
+                            )
+                        )
                         refreshMaskStatus()
                     }
                     android.view.MotionEvent.ACTION_MOVE -> {
@@ -1631,7 +1767,10 @@ class MainActivity : Activity() {
                                 erase = activeTool == "Eraser",
                                 feather = masking.brushFeather.toInt()
                             ) else null
-                        if (updated != null) editingState.updateMasking(updated, "Paint Mask")
+                        if (updated != null) editingState.updateMasking(
+                            updated,
+                            getString(R.string.history_paint_mask)
+                        )
                         refreshMaskStatus()
                     }
                     android.view.MotionEvent.ACTION_UP -> {
@@ -1793,32 +1932,39 @@ class MainActivity : Activity() {
     }
 
     private fun setupComparisonControl() {
-        compareButton.setOnClickListener { }
-        compareButton.setOnTouchListener { view, event ->
+        compareButton.setOnClickListener {
+            if (compareTouchInProgress || !canEditPhoto()) return@setOnClickListener
+            if (compareHeld) endCompare() else beginCompare()
+        }
+        compareButton.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     if (compareHeld || !canEditPhoto() || sourceBitmap == null) {
                         return@setOnTouchListener false
                     }
-                    view.isPressed = true
+                    compareTouchInProgress = true
+                    compareButton.isPressed = true
                     beginCompare()
                     true
                 }
 
                 MotionEvent.ACTION_UP -> {
                     if (!compareHeld) {
-                        view.isPressed = false
+                        compareButton.isPressed = false
+                        compareTouchInProgress = false
                         return@setOnTouchListener false
                     }
-                    view.isPressed = false
+                    compareButton.isPressed = false
                     endCompare()
-                    view.performClick()
+                    compareButton.performClick()
+                    compareTouchInProgress = false
                     true
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
-                    view.isPressed = false
+                    compareButton.isPressed = false
                     endCompare()
+                    compareTouchInProgress = false
                     true
                 }
 
@@ -1837,6 +1983,7 @@ class MainActivity : Activity() {
             return
         }
         compareHeld = true
+        compareButton.contentDescription = getString(R.string.compare_showing_original)
         applyDisplayedBitmap()
     }
 
@@ -1845,6 +1992,9 @@ class MainActivity : Activity() {
             return
         }
         compareHeld = false
+        if (::compareButton.isInitialized) {
+            compareButton.contentDescription = getString(R.string.compare_showing_edited)
+        }
         if (::compareButton.isInitialized) {
             compareButton.isPressed = false
         }
@@ -2521,6 +2671,8 @@ class MainActivity : Activity() {
             ?: getString(R.string.preview_untitled)
         previewImage.contentDescription = if (compareHeld) {
             getString(R.string.preview_content_description_original, displayName)
+        } else if (selectedCategory == EditorCategory.MASKING) {
+            getString(R.string.mask_canvas_description_named, displayName)
         } else {
             getString(R.string.preview_content_description_named, displayName)
         }
@@ -2641,23 +2793,27 @@ class MainActivity : Activity() {
             (crop.height * 100f).roundToInt(),
             getString(ratioLabel(ratio))
         )
-        cropWidthSeekBar.contentDescription = getString(
-            R.string.crop_control_description,
+        cropWidthSeekBar.contentDescription = resources.getQuantityString(
+            R.plurals.percent_value,
+            progressPercent(cropWidthSeekBar.progress),
             cropWidthLabel.text,
             progressPercent(cropWidthSeekBar.progress)
         )
-        cropHeightSeekBar.contentDescription = getString(
-            R.string.crop_control_description,
+        cropHeightSeekBar.contentDescription = resources.getQuantityString(
+            R.plurals.percent_value,
+            progressPercent(cropHeightSeekBar.progress),
             getString(R.string.crop_height_label),
             progressPercent(cropHeightSeekBar.progress)
         )
-        cropHorizontalSeekBar.contentDescription = getString(
-            R.string.crop_control_description,
+        cropHorizontalSeekBar.contentDescription = resources.getQuantityString(
+            R.plurals.percent_value,
+            progressPercent(cropHorizontalSeekBar.progress),
             getString(R.string.crop_horizontal_label),
             progressPercent(cropHorizontalSeekBar.progress)
         )
-        cropVerticalSeekBar.contentDescription = getString(
-            R.string.crop_control_description,
+        cropVerticalSeekBar.contentDescription = resources.getQuantityString(
+            R.plurals.percent_value,
+            progressPercent(cropVerticalSeekBar.progress),
             getString(R.string.crop_vertical_label),
             progressPercent(cropVerticalSeekBar.progress)
         )
@@ -2787,7 +2943,8 @@ class MainActivity : Activity() {
     private fun showError(message: String, actionLabel: Int, action: (() -> Unit)?) {
         hideActionSheet()
         val fullMessage = if (sourceBitmap != null) {
-            message + "\n" + getString(R.string.error_current_photo_kept)
+            getString(R.string.error_with_current_photo_kept, message,
+                getString(R.string.error_current_photo_kept))
         } else {
             message
         }
