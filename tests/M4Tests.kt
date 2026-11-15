@@ -81,6 +81,23 @@ private fun testCropModel() {
         "sixteen-nine ratio is 16/9",
         CropRatio.SIXTEEN_NINE.widthToHeight?.let { close(it, 16f / 9f) } == true
     )
+    val requestedRatios = listOf(
+        CropRatio.THREE_TWO to 3f / 2f,
+        CropRatio.TWO_THREE to 2f / 3f,
+        CropRatio.FOUR_THREE to 4f / 3f,
+        CropRatio.FIVE_FOUR to 5f / 4f
+    )
+    requestedRatios.forEach { (ratio, expected) ->
+        verify(
+            "${ratio.name.lowercase()} ratio uses requested aspect",
+            ratio.widthToHeight?.let { close(it, expected) } == true
+        )
+        val crop = CropGeometry.centered(ratio, 3000, 2000)
+        verify(
+            "${ratio.name.lowercase()} crop preserves image aspect",
+            close(crop.width * 3000f / (crop.height * 2000f), expected)
+        )
+    }
 }
 
 private fun testCropGeometry() {

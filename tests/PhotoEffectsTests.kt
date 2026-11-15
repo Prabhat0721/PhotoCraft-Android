@@ -54,7 +54,7 @@ fun main() {
 
     var rejected = false
     try {
-        PhotoEffectsMath.applyInPlace(original, 2, 2, PhotoEffects(vignette = 50))
+        PhotoEffectsMath.applyInPlace(original, 4, 3, PhotoEffects(vignette = 50))
     } catch (_: IllegalArgumentException) {
         rejected = true
     }

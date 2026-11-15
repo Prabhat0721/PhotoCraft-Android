@@ -33,6 +33,7 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/CropSelection.kt" \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
     "$EDIT_DIR/EditingState.kt" \
@@ -50,6 +51,7 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/CropSelection.kt" \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
     "$EDIT_DIR/EditingState.kt" \
@@ -74,6 +76,7 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/ComparisonMode.kt" \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
     "$EDIT_DIR/EditStateCodec.kt" \
@@ -97,6 +100,7 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/FilterMath.kt" \
     "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
     "$EDIT_DIR/EditStateCodec.kt" \
@@ -121,6 +125,7 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/CropSelection.kt" \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
     "$EDIT_DIR/EditingState.kt" \
@@ -140,6 +145,8 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/CropSelection.kt" \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
     "$EXPORT_DIR/ExportOptions.kt" \
     "$EXPORT_DIR/ExportPlanner.kt" \
     "$EXPORT_DIR/ExportMemoryPolicy.kt" \
@@ -151,3 +158,40 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
 
 printf 'Running M5.2 uncapped export, crop, and cancellation tests...\n'
 java -Xms32m -Xmx256m -jar "$WORK/m5_2-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$ROOT/tests/ColorGradingTests.kt" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/color-grading-tests.jar"
+
+printf 'Running color-grading pixel tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/color-grading-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$ROOT/tests/PhotoEffectsTests.kt" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/photo-effects-tests.jar"
+
+printf 'Running photo-effects pixel tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/photo-effects-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/EditingState.kt" \
+    "$ROOT/tests/PhotoEffectsHistoryTests.kt" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/photo-effects-history-tests.jar"
+
+printf 'Running photo-effects history tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/photo-effects-history-tests.jar"
