@@ -104,7 +104,7 @@ class PreviewRenderer : Closeable {
             ColorGradingMath.applyInPlace(pixels, colorGrading)
 
             // Apply each enabled local mask and blend by its coverage.
-            for (layer in listOf(masking.subject, masking.background)) {
+            for (layer in masking.layers) {
                 if (!layer.enabled) continue
                 val selection = layer.selection ?: continue
                 val local = layer.adjustments
@@ -181,3 +181,4 @@ class PreviewRenderer : Closeable {
         pixelBuffer = null
     }
 }
+

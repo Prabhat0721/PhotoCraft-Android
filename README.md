@@ -36,14 +36,15 @@ The native implementation is kept in this repository. The checked-out project co
 | Pixel processing | Light/color adjustments, HSL mixer, color grading, filters, effects and local-mask compositing in `edit/` |
 | Preview | Background-thread rendering and stale-request cancellation in `image/PreviewRenderer.kt` |
 | Export | Full-resolution tiled JPEG processing, crop and local-mask application in `export/JpegExporter.kt` |
-| Masks and presets | Subject/background selection, brush masks, local edits and serialized custom presets |
+| Masks and presets | Editable mask layers, subject/background segmentation, brush and eraser, linear/radial gradients, sampled color/luminance ranges, inversion, visibility, combination modes, local edits and serialized custom presets |
 | Delivery workflow | `.github/workflows` builds and uploads a debug APK on `main` pushes and manual dispatch |
 
 The crop ratio selector now includes the requested 1:1, 3:2, 2:3, 4:3, 5:4 and 16:9 presets, alongside the existing free, 4:5 and 9:16 options. New ratio values are appended to the enum so existing saved ordinal values remain valid.
 
-This is still not a complete implementation of the full editor brief. RGB/tonal curves; rotate, flip and straighten; PNG export; configurable detail radius/detail/masking; and the requested color-grading wheels are not implemented. The current three-way grading controls use hue, saturation amount and luminance sliders rather than color wheels. Brush size, feather and flow are available, but preset and activity-state serialization do not preserve painted mask coverage and every mask setting. Frame Folk source comparison and device-side visual verification also remain outstanding.
+This is still not a complete implementation of the full editor brief. RGB/tonal curves; rotate, flip and straighten; PNG export; configurable detail radius/detail/masking; sky, landscape and object recognition; depth masks; and the requested color-grading wheels are not implemented. Subject detection uses the existing selfie-segmentation model. Color and luminance ranges are sampled around the tapped pixel. The current three-way grading controls use hue, saturation amount and luminance sliders rather than color wheels. Preset and activity-state serialization do not preserve painted mask coverage and every mask setting. Frame Folk source comparison and device-side visual verification also remain outstanding.
 
 ## Verification
 
 The debug APK built successfully with Gradle 8.11.1, JDK 17 and Android SDK 36. The repository test runner now includes the masking and effects sources required by its current models, plus pixel tests for color grading and effects; the M2–M5.2, color-grading, effects and effects-history suites pass. The APK is at `app/build/outputs/apk/debug/app-debug.apk`. No device-side interaction or export verification has been performed here.
+
 

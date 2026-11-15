@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 31210)
+Total output lines: 3159
+
 package com.prabhat.photocraft
 
 import android.app.Activity
@@ -346,10 +349,7 @@ class MainActivity : Activity() {
                     val updatedLayer = selectedLayer.copy(
                         adjustments = selectedLayer.adjustments.copy(adjustments = updatedAdjustments)
                     )
-                    val updatedMasking = when (masking.selectedMask) {
-                        com.prabhat.photocraft.edit.MaskType.SUBJECT -> masking.copy(subject = updatedLayer)
-                        com.prabhat.photocraft.edit.MaskType.BACKGROUND -> masking.copy(background = updatedLayer)
-                    }
+                    val updatedMasking = masking.updateSelected(updatedLayer)
                     if (editingState.updateMasking(updatedMasking, "Local Mask Adjustment")) {
                         clearExportStatus()
                         requestPreviewRender()
@@ -1173,16 +1173,10 @@ class MainActivity : Activity() {
 
 
 
-    private fun setupLocalMaskAdjustmentControls(
-        container: LinearLayout,
-        type: com.prabhat.photocraft.edit.MaskType
-    ) {
+    private fun setupLocalMaskAdjustmentControls(container: LinearLayout) {
         val initialMasking = editingState.state.masking
-        val initialLayer = if (type == com.prabhat.photocraft.edit.MaskType.SUBJECT) {
-            initialMasking.subject
-        } else {
-            initialMasking.background
-        }
+        val initialLayer = initialMasking.selected()
+        container.removeAllViews()
 
         fun addGroupTitle(title: String) {
             container.addView(TextView(this).apply {
@@ -1211,7 +1205,7 @@ class MainActivity : Activity() {
             val seek = SeekBar(this).apply {
                 max = 200
                 progress = initial + 100
-                contentDescription = "${type.name} ${adjustment.name}"
+                    contentDescription = "${initialLayer.name} ${adjustment.name}"
             }
 
             fun showValue(value: Int) {
@@ -1230,9 +1224,7 @@ class MainActivity : Activity() {
                     if (!fromUser || !canEditPhoto()) return
 
                     val current = editingState.state.masking
-                    val layer = if (type ==
-                        com.prabhat.photocraft.edit.MaskType.SUBJECT
-                    ) current.subject else current.background
+                    val layer = current.layers.firstOrNull { it.id == initialLayer.id } ?: return
 
                     val updatedLayer = layer.copy(
                         adjustments = layer.adjustments.copy(
@@ -1240,13 +1232,10 @@ class MainActivity : Activity() {
                                 .with(adjustment, value)
                         )
                     )
-                    val updated = if (type ==
-                        com.prabhat.photocraft.edit.MaskType.SUBJECT
-                    ) current.copy(subject = updatedLayer)
-                    else current.copy(background = updatedLayer)
+                    val updated = current.updateSelected(updatedLayer)
 
                     editingState.updateMasking(
-                        updated, "Local ${type.name} ${adjustment.name}"
+                        updated, "Local ${initialLayer.name} ${adjustment.name}"
                     )
                     clearExportStatus()
                     syncUiState()
@@ -1263,404 +1252,7 @@ class MainActivity : Activity() {
 
             row.addView(label, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ))
-            row.addView(seek, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ))
-            container.addView(row, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ))
-        }
-
-        addGroupTitle("LIGHT")
-        com.prabhat.photocraft.edit.Adjustment.values()
-            .filter { it.group ==
-                com.prabhat.photocraft.edit.AdjustmentGroup.LIGHT }
-            .forEach { addAdjustment(it) }
-
-        addGroupTitle("COLOR")
-        com.prabhat.photocraft.edit.Adjustment.values()
-            .filter { it.group ==
-                com.prabhat.photocraft.edit.AdjustmentGroup.COLOR }
-            .forEach { addAdjustment(it) }
-    }
-
-    private fun setupMaskingControls() {
-        val subjectButton = findViewById<Button>(R.id.maskSubjectButton)
-        val backgroundButton = findViewById<Button>(R.id.maskBackgroundButton)
-        val brushButton = findViewById<Button>(R.id.maskBrushButton)
-        val eraserButton = findViewById<Button>(R.id.maskEraserButton)
-        val invertButton = findViewById<Button>(R.id.maskInvertButton)
-        val statusText = findViewById<TextView>(R.id.maskStatusText)
-        val brushControls = findViewById<LinearLayout>(R.id.maskBrushControls)
-        setupLocalMaskAdjustmentControls(
-            findViewById(R.id.maskSubjectAdjustments),
-            com.prabhat.photocraft.edit.MaskType.SUBJECT
-        )
-        setupLocalMaskAdjustmentControls(
-            findViewById(R.id.maskBackgroundAdjustments),
-            com.prabhat.photocraft.edit.MaskType.BACKGROUND
-        )
-
-        brushControls.removeAllViews()
-        fun addBrushControl(
-            title: String,
-            minimum: Int,
-            maximum: Int,
-            initial: Int,
-            write: (com.prabhat.photocraft.edit.MaskingState, Int) ->
-                com.prabhat.photocraft.edit.MaskingState
-        ) {
-            val label = TextView(this).apply {
-                textSize = 13f
-                setTextColor(getColor(R.color.text_secondary))
-            }
-            val seek = SeekBar(this).apply {
-                max = maximum - minimum
-                progress = (initial - minimum).coerceIn(0, max)
-                contentDescription = title
-            }
-            fun updateLabel(value: Int) {
-                label.text = "$title: $value"
-            }
-            updateLabel(initial)
-            brushControls.addView(label)
-            brushControls.addView(seek)
-            seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val value = progress + minimum
-                    updateLabel(value)
-                    if (fromUser && canEditPhoto()) {
-                        val masking = editingState.state.masking
-                        editingState.updateMasking(write(masking, value), title)
-                    }
-                }
-                override fun onStartTrackingTouch(bar: SeekBar?) {
-                    if (canEditPhoto()) editingState.beginGesture()
-                }
-                override fun onStopTrackingTouch(bar: SeekBar?) {
-                    if (canEditPhoto()) {
-                        editingState.endGesture()
-                        refreshHistory()
-                        syncUiState()
-                    }
-                }
-            })
-        }
-        val currentMasking = editingState.state.masking
-        addBrushControl(
-            "Brush Size", 5, 200, currentMasking.brushSize.toInt(),
-            { state, value -> state.copy(brushSize = value.toFloat()) }
-        )
-        addBrushControl(
-            "Feather", 0, 100, currentMasking.brushFeather.toInt(),
-            { state, value -> state.copy(brushFeather = value.toFloat()) }
-        )
-        addBrushControl(
-            "Flow", 1, 100, currentMasking.brushFlow.toInt(),
-            { state, value -> state.copy(brushFlow = value.toFloat()) }
-        )
-
-        var activeTool = "Brush"
-        val preview = previewImage
-
-        fun refreshMaskStatus() {
-            val masking = editingState.state.masking
-            val layer = masking.selected()
-            statusText.text = "Mask: ${masking.selectedMask} • Tool: $activeTool • " +
-                if (layer.selection == null) "No selection yet" else "Selection ready"
-            preview.setMaskSelection(
-                if (selectedCategory == EditorCategory.MASKING && !compareHeld) {
-                    layer.selection
-                } else null
-            )
-        }
-
-        fun autoSelectMask(type: com.prabhat.photocraft.edit.MaskType) {
-            val bitmap = sourceBitmap
-            if (bitmap == null) {
-                statusText.text = "Open a photo first"
-                return
-            }
-
-            val current = editingState.state.masking
-            val existingSubject = current.subject.selection
-
-            fun applySubjectMask(subject: com.prabhat.photocraft.edit.MaskSelection) {
-                val inverse = ByteArray(subject.coverage.size) { i ->
-                    (255 - (subject.coverage[i].toInt() and 0xFF)).toByte()
-                }
-                val background = com.prabhat.photocraft.edit.MaskSelection(
-                    subject.width, subject.height, inverse
-                )
-                val updated = current.copy(
-                    subject = current.subject.copy(selection = subject, inverted = false),
-                    background = current.background.copy(selection = background, inverted = false),
-                    selectedMask = type
-                )
-                editingState.updateMasking(updated, "Auto Select $type")
-                refreshMaskStatus()
-                syncUiState()
-            }
-
-            if (type == com.prabhat.photocraft.edit.MaskType.BACKGROUND &&
-                existingSubject != null
-            ) {
-                applySubjectMask(existingSubject)
-                return
-            }
-
-            statusText.text = "Detecting subject..."
-            CoroutineScope(Dispatchers.Main).launch {
-                try {
-                    val detected = selfieMaskSegmenter.createMask(bitmap)
-                    val inverse = ByteArray(detected.coverage.size) { i ->
-                        (255 - (detected.coverage[i].toInt() and 0xFF)).toByte()
-                    }
-                    val background = com.prabhat.photocraft.edit.MaskSelection(
-                        detected.width, detected.height, inverse
-                    )
-                    val latest = editingState.state.masking.copy(
-                        subject = editingState.state.masking.subject.copy(
-                            selection = detected, inverted = false
-                        ),
-                        background = editingState.state.masking.background.copy(
-                            selection = background, inverted = false
-                        ),
-                        selectedMask = type
-                    )
-                    editingState.updateMasking(latest, "Auto Select $type")
-                    refreshMaskStatus()
-                    syncUiState()
-                } catch (error: Exception) {
-                    statusText.text = "Subject detection failed: ${error.message ?: "try again"}"
-                }
-            }
-        }
-
-        subjectButton.setOnClickListener {
-            autoSelectMask(com.prabhat.photocraft.edit.MaskType.SUBJECT)
-        }
-
-        backgroundButton.setOnClickListener {
-            autoSelectMask(com.prabhat.photocraft.edit.MaskType.BACKGROUND)
-        }
-
-        brushButton.setOnClickListener {
-            activeTool = "Brush"
-            refreshMaskStatus()
-        }
-
-        eraserButton.setOnClickListener {
-            activeTool = "Eraser"
-            refreshMaskStatus()
-        }
-
-        invertButton.setOnClickListener {
-            val masking = editingState.state.masking
-            val layer = masking.selected()
-            val updatedLayer = layer.copy(inverted = !layer.inverted)
-            val updatedMasking = when (masking.selectedMask) {
-                com.prabhat.photocraft.edit.MaskType.SUBJECT ->
-                    masking.copy(subject = updatedLayer)
-                com.prabhat.photocraft.edit.MaskType.BACKGROUND ->
-                    masking.copy(background = updatedLayer)
-            }
-            editingState.updateMasking(updatedMasking, "Invert Mask")
-            refreshMaskStatus()
-            syncUiState()
-        }
-
-        preview.setMaskTouchListener { x, y, action ->
-            if (selectedCategory != EditorCategory.MASKING || compareHeld || sourceBitmap == null) {
-                false
-            } else {
-                when (action) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        editingState.beginGesture()
-                        val masking = editingState.state.masking
-                        editingState.updateMasking(
-                            masking.paintSelected(
-                                sourceBitmap!!.width,
-                                sourceBitmap!!.height,
-                                x, y, masking.brushSize, masking.brushFlow.toInt(),
-                                erase = activeTool == "Eraser",
-                                feather = masking.brushFeather.toInt()
-                            ),
-                            "Paint Mask"
-                        )
-                        refreshMaskStatus()
-                    }
-                    android.view.MotionEvent.ACTION_MOVE -> {
-                        val masking = editingState.state.masking
-                        editingState.updateMasking(
-                            masking.paintSelected(
-                                sourceBitmap!!.width,
-                                sourceBitmap!!.height,
-                                x, y, masking.brushSize, masking.brushFlow.toInt(),
-                                erase = activeTool == "Eraser",
-                                feather = masking.brushFeather.toInt()
-                            ),
-                            "Paint Mask"
-                        )
-                        refreshMaskStatus()
-                    }
-                    android.view.MotionEvent.ACTION_UP -> {
-                        editingState.endGesture()
-                        refreshMaskStatus()
-                        syncUiState()
-                    }
-                    android.view.MotionEvent.ACTION_CANCEL -> {
-                        editingState.cancelGesture()
-                        refreshMaskStatus()
-                        syncUiState()
-                    }
-                }
-                true
-            }
-        }
-
-        refreshMaskStatus()
-    }
-
-    private fun wireControls() {
-        openPhotoButton.setOnClickListener { openPhotoPicker() }
-        changePhotoButton.setOnClickListener { openPhotoPicker() }
-
-        undoButton.setOnClickListener {
-            val previousState = editingState.state
-            if (editingState.undo()) {
-                afterHistoryChange(previousState)
-            }
-        }
-
-        redoButton.setOnClickListener {
-            val previousState = editingState.state
-            if (editingState.redo()) {
-                afterHistoryChange(previousState)
-            }
-        }
-
-        overflowButton.setOnClickListener { showOverflowMenu() }
-        actionSheetCloseButton.setOnClickListener {
-            if (!exportGate.isExporting) {
-                hideActionSheet()
-            }
-        }
-
-        categoryGroup.setOnCheckedChangeListener { _, checkedId ->
-            if (suppressCategoryEvents) {
-                return@setOnCheckedChangeListener
-            }
-            val category = when (checkedId) {
-                R.id.lightCategory -> EditorCategory.LIGHT
-                R.id.colorCategory -> EditorCategory.COLOR
-                R.id.effectsCategory -> EditorCategory.EFFECTS
-                R.id.maskingCategory -> EditorCategory.MASKING
-                R.id.cropCategory -> EditorCategory.CROP
-                else -> return@setOnCheckedChangeListener
-            }
-            if (!canEditPhoto()) {
-                applyCategoryVisibility()
-                return@setOnCheckedChangeListener
-            }
-            if (category == selectedCategory) {
-                return@setOnCheckedChangeListener
-            }
-            endCompare()
-            selectedCategory = category
-            applyCategoryVisibility()
-            applyDisplayedBitmap()
-            syncUiState()
-        }
-        setupComparisonControl()
-
-        exportButton.setOnClickListener { startExport() }
-        exportCancelButton.setOnClickListener {
-            if (!exportGate.isExporting) {
-                return@setOnClickListener
-            }
-            exportCancelButton.isEnabled = false
-            exportStatus.text = getString(R.string.export_cancelling)
-            exporter.cancel()
-        }
-
-        errorRetryButton.setOnClickListener {
-            val action = errorAction
-            hideError()
-            action?.invoke()
-        }
-    }
-
-    private fun showOverflowMenu() {
-        if (!canEditPhoto()) {
-            return
-        }
-        val popup = PopupMenu(this, overflowButton)
-        popup.menu.add(Menu.NONE, MENU_PRESETS, 0, R.string.preset_title)
-        popup.menu.add(Menu.NONE, MENU_HISTORY, 1, R.string.history_title)
-        popup.menu.add(Menu.NONE, MENU_EXPORT, 2, R.string.export_title)
-        popup.menu.add(Menu.NONE, MENU_RESET, 3, R.string.reset)
-        popup.menu.add(Menu.NONE, MENU_CHANGE_PHOTO, 4, R.string.change_photo)
-        popup.menu.findItem(MENU_RESET)?.isEnabled = editingState.isModified
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_PRESETS -> showActionSheet(R.string.preset_title, presetPanel)
-                MENU_HISTORY -> showActionSheet(R.string.history_title, historyPanel)
-                MENU_EXPORT -> showActionSheet(R.string.export_title, exportPanel)
-                MENU_RESET -> {
-                    val previousState = editingState.state
-                    if (editingState.reset(getString(R.string.reset))) {
-                        afterHistoryChange(previousState)
-                    }
-                }
-
-                MENU_CHANGE_PHOTO -> openPhotoPicker()
-                else -> return@setOnMenuItemClickListener false
-            }
-            true
-        }
-        popup.show()
-    }
-
-    private fun showActionSheet(titleRes: Int, panel: View) {
-        if (sourceBitmap == null) {
-            return
-        }
-        endCompare()
-        presetPanel.visibility =
-            if (panel === presetPanel) View.VISIBLE else View.GONE
-        historyPanel.visibility =
-            if (panel === historyPanel) View.VISIBLE else View.GONE
-        exportPanel.visibility =
-            if (panel === exportPanel) View.VISIBLE else View.GONE
-        actionSheetTitle.setText(titleRes)
-        if (panel === historyPanel) {
-            refreshHistory()
-        }
-        if (panel === exportPanel) {
-            updateOutputSummary()
-        }
-        actionSheetOverlay.importantForAccessibility =
-            View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
-        actionSheetOverlay.visibility = View.VISIBLE
-        mainColumn.importantForAccessibility =
-            View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        actionSheetOverlay.requestFocus()
-        actionSheetScroll.post { actionSheetScroll.scrollTo(0, 0) }
-    }
-
-    private fun hideActionSheet() {
-        if (::actionSheetOverlay.isInitialized) {
-            actionSheetOverlay.visibility = View.GONE
-            actionSheetOverlay.importantForAccessibility =
-                View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
-        }
-        if (::mainColumn.isInitialized) {
-            mainColumn.importantForAccessibility =
+                LinearLayout.LayoutParams.WRAP_CONTEN…6210 tokens truncated…mainColumn.importantForAccessibility =
                 View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
         }
     }
@@ -3031,4 +2623,5 @@ class MainActivity : Activity() {
         const val LEGACY_STATE_REDO = "m2_redo"
     }
 }
+
 
