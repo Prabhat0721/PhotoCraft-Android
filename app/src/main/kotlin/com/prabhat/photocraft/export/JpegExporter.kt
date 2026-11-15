@@ -556,4 +556,3 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
     }
 }
 
-

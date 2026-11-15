@@ -181,4 +181,3 @@ class PreviewRenderer : Closeable {
         pixelBuffer = null
     }
 }
-

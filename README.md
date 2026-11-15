@@ -47,4 +47,3 @@ This is still not a complete implementation of the full editor brief. RGB/tonal 
 
 The debug APK built successfully with Gradle 8.11.1, JDK 17 and Android SDK 36. The repository test runner now includes the masking and effects sources required by its current models, plus pixel tests for color grading and effects; the M2–M5.2, color-grading, effects and effects-history suites pass. The APK is at `app/build/outputs/apk/debug/app-debug.apk`. No device-side interaction or export verification has been performed here.
 
-

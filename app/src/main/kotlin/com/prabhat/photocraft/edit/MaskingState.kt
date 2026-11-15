@@ -218,4 +218,3 @@ data class MaskingState(
     fun selectMask(type: MaskType): MaskingState =
         selectLayer(layers.firstOrNull { it.type == type }?.id ?: subject.id)
 }
-
