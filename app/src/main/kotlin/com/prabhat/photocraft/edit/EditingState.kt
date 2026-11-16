@@ -100,6 +100,18 @@ class EditingState(initial: EditState = EditState()) {
         return commit(next, label)
     }
 
+    fun updateCurves(curves: ToneCurves, label: String = "Tone Curves"): Boolean {
+        val next = state.copy(curves = curves)
+        if (next == state) return false
+        return commit(next, label)
+    }
+
+    fun updateGeometry(geometry: GeometrySettings, label: String = "Geometry"): Boolean {
+        val next = state.copy(geometry = geometry)
+        if (next == state) return false
+        return commit(next, label)
+    }
+
     fun updateMasking(
         masking: MaskingState,
         label: String = "Masking"

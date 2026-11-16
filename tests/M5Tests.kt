@@ -135,7 +135,7 @@ private fun testM5StateCodec() {
         filter = FilterSettings(Filter.VINTAGE, 65)
     )
     val encoded = M5StateCodec.encode(state)
-    verify("m5 codec encodes 53 integers", encoded.size == M5StateCodec.VALUE_COUNT)
+    verify("m5 codec stores extended effects and curve settings", encoded.size == M5StateCodec.VALUE_COUNT)
     verify("m5 codec round trips state", M5StateCodec.decode(encoded) == state)
 
     val gradedState = state.copy(
@@ -147,6 +147,7 @@ private fun testM5StateCodec() {
             shadows = ToneGrade(hue = -120, amount = 35, luminance = -10),
             midtones = ToneGrade(hue = 55, amount = 20, luminance = 8),
             highlights = ToneGrade(hue = 90, amount = 65, luminance = -5),
+            global = ToneGrade(hue = 145, amount = 32, luminance = 6),
             balance = -25,
             blending = 70
         )
@@ -155,6 +156,30 @@ private fun testM5StateCodec() {
         "m5 codec round trips non-neutral color grading",
         M5StateCodec.decode(M5StateCodec.encode(gradedState)) == gradedState
     )
+    val currentGradingValues = M5StateCodec.encode(gradedState)
+    val priorExtendedValues = IntArray(M5StateCodec.PRE_GLOBAL_GRADE_VALUE_COUNT)
+    currentGradingValues.copyOfRange(0, 51).copyInto(priorExtendedValues)
+    currentGradingValues.copyOfRange(54, currentGradingValues.size)
+        .copyInto(priorExtendedValues, 51)
+    verify(
+        "m5 codec keeps compatibility with pre-global 85-value edits",
+        M5StateCodec.decode(priorExtendedValues) == gradedState.copy(
+            colorGrading = gradedState.colorGrading.copy(global = ToneGrade())
+        )
+    )
+    val curveValues = com.prabhat.photocraft.edit.ToneCurves.NEUTRAL.values().also { it[2] = 61 }
+    val curvesState = state.copy(
+        curves = com.prabhat.photocraft.edit.ToneCurves.fromValues(curveValues),
+        effects = com.prabhat.photocraft.edit.PhotoEffects(
+            sharpness = 54, sharpeningRadius = 4, sharpeningDetail = 72,
+            sharpeningMasking = 31, backgroundBlur = 43
+        ),
+        geometry = com.prabhat.photocraft.edit.GeometrySettings(
+            rotationDegrees = -2.7f, flipHorizontal = true
+        )
+    )
+    verify("m5 codec persists curves, sharpening, blur and geometry controls",
+        M5StateCodec.decode(M5StateCodec.encode(curvesState)) == curvesState)
 
     val legacyValues = IntArray(M5StateCodec.LEGACY_VALUE_COUNT)
     EditStateCodec.encode(state).copyInto(legacyValues)

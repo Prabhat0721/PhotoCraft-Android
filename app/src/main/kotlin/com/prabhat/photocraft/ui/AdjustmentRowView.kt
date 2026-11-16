@@ -25,7 +25,7 @@ class AdjustmentRowView @JvmOverloads constructor(
 
     private val labelView: TextView
     private val valueView: TextView
-    private val seekBar: SeekBar
+    private val seekBar: ResettableSeekBar
     private var boundAdjustment: Adjustment? = null
     private var listener: Listener? = null
     private var suppressCallback = false
@@ -62,6 +62,7 @@ class AdjustmentRowView @JvmOverloads constructor(
         labelView = findViewById(R.id.adjustmentLabel)
         valueView = findViewById(R.id.adjustmentValue)
         seekBar = findViewById(R.id.adjustmentSeekBar)
+        seekBar.setDefaultProgress(-Adjustment.MIN_VALUE)
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {

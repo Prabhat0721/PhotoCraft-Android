@@ -5,6 +5,13 @@ import com.prabhat.photocraft.edit.CropSelection
 import com.prabhat.photocraft.edit.FilterSettings
 import com.prabhat.photocraft.edit.MaskingState
 import com.prabhat.photocraft.edit.PhotoEffects
+import com.prabhat.photocraft.edit.ToneCurves
+import com.prabhat.photocraft.edit.GeometrySettings
+
+enum class ExportFormat(val extension: String, val mimeType: String) {
+    JPEG("jpg", "image/jpeg"),
+    PNG("png", "image/png")
+}
 
 enum class ExportQuality(val jpegQuality: Int) {
     HIGH(95),
@@ -58,6 +65,9 @@ data class ExportRequest(
     val sourceWidth: Int = 0,
     val sourceHeight: Int = 0,
     val masking: MaskingState = MaskingState(),
-    val effects: PhotoEffects = PhotoEffects.NEUTRAL
+    val effects: PhotoEffects = PhotoEffects.NEUTRAL,
+    val curves: ToneCurves = ToneCurves.NEUTRAL,
+    val format: ExportFormat = ExportFormat.JPEG,
+    val geometry: GeometrySettings = GeometrySettings.NEUTRAL
 )
 

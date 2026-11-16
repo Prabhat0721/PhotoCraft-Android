@@ -18,7 +18,7 @@
             android:textColor="@color/text_primary"
             android:textSize="12sp" />
 
-        <SeekBar
+        <com.prabhat.photocraft.ui.ResettableSeekBar
             android:id="@+id/adjustmentSeekBar"
             style="@style/PhotoCraftSeekBar"
             android:layout_width="0dp"
@@ -38,7 +38,7 @@
             android:gravity="end"
             android:maxLines="1"
             android:textColor="@color/accent"
-            android:textSize="10sp" />
+            android:textSize="11sp" />
     </LinearLayout>
 
 </merge>

@@ -38,6 +38,8 @@ import android.graphics.drawable.ClipDrawable
 import android.view.Gravity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import com.prabhat.photocraft.edit.SelfieMaskSegmenter
 import com.prabhat.photocraft.edit.Adjustment
@@ -57,9 +59,11 @@ import com.prabhat.photocraft.edit.ToneGrade
 import com.prabhat.photocraft.edit.ColorGradingSettings
 import com.prabhat.photocraft.edit.PhotoEffects
 import com.prabhat.photocraft.edit.M5StateCodec
+import com.prabhat.photocraft.edit.MaskingStateCodec
 import com.prabhat.photocraft.export.DestinationAttestation
 import com.prabhat.photocraft.export.DestinationCreation
 import com.prabhat.photocraft.export.ExportDecision
+import com.prabhat.photocraft.export.ExportFormat
 import com.prabhat.photocraft.export.ExportGate
 import com.prabhat.photocraft.export.ExportNaming
 import com.prabhat.photocraft.export.ExportPicker
@@ -74,9 +78,12 @@ import com.prabhat.photocraft.preset.Preset
 import com.prabhat.photocraft.preset.PresetName
 import com.prabhat.photocraft.preset.PresetStore
 import com.prabhat.photocraft.ui.AdjustmentRowView
+import com.prabhat.photocraft.ui.AccessibleImageButton
 import com.prabhat.photocraft.ui.AdaptivePreviewLayout
 import com.prabhat.photocraft.ui.CropOverlayView
 import com.prabhat.photocraft.ui.CropPreviewView
+import com.prabhat.photocraft.ui.ColorGradingWheelView
+import com.prabhat.photocraft.ui.ResettableSeekBar
 import com.prabhat.photocraft.util.PhotoRestore
 import kotlin.math.roundToInt
 
@@ -100,7 +107,7 @@ class MainActivity : Activity() {
     private lateinit var previewCard: AdaptivePreviewLayout
     private lateinit var previewImage: CropPreviewView
     private lateinit var cropOverlay: CropOverlayView
-    private lateinit var compareButton: ImageButton
+    private lateinit var compareButton: AccessibleImageButton
     private lateinit var loadOverlay: View
     private lateinit var previewMeta: TextView
     private lateinit var editedBadge: TextView
@@ -117,11 +124,12 @@ class MainActivity : Activity() {
     private lateinit var cropPanel: View
     private lateinit var qualitySpinner: Spinner
     private lateinit var sizeSpinner: Spinner
+    private lateinit var formatSpinner: Spinner
     private lateinit var outputSummary: TextView
     private lateinit var filterSpinner: Spinner
     private lateinit var filterSummary: TextView
     private lateinit var filterIntensityLabel: TextView
-    private lateinit var filterIntensitySeekBar: SeekBar
+    private lateinit var filterIntensitySeekBar: ResettableSeekBar
     private lateinit var presetNameInput: EditText
     private lateinit var presetSpinner: Spinner
     private lateinit var savePresetButton: Button
@@ -140,10 +148,11 @@ class MainActivity : Activity() {
     private lateinit var cropSummary: TextView
     private lateinit var cropWidthLabel: TextView
     private lateinit var cropHeightLabel: TextView
-    private lateinit var cropWidthSeekBar: SeekBar
-    private lateinit var cropHeightSeekBar: SeekBar
-    private lateinit var cropHorizontalSeekBar: SeekBar
-    private lateinit var cropVerticalSeekBar: SeekBar
+    private lateinit var cropWidthSeekBar: ResettableSeekBar
+    private lateinit var cropHeightSeekBar: ResettableSeekBar
+    private lateinit var cropHorizontalSeekBar: ResettableSeekBar
+    private lateinit var cropVerticalSeekBar: ResettableSeekBar
+    private lateinit var straightenSeekBar: ResettableSeekBar
     private lateinit var exportButton: Button
     private lateinit var exportProgress: ProgressBar
     private lateinit var exportStatus: TextView
@@ -233,6 +242,7 @@ class MainActivity : Activity() {
     private var lastHistoryRevision = -1
     private var sourceBitmap: Bitmap? = null
     private val selfieMaskSegmenter = SelfieMaskSegmenter()
+    private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var adjustedBitmap: Bitmap? = null
     private var currentDisplayName: String? = null
     private var selectedUri: Uri? = null
@@ -245,9 +255,12 @@ class MainActivity : Activity() {
     private var pendingExportRequest: ExportRequest? = null
     private var loadingPhoto = false
     private var compareHeld = false
+    private var compareTouchInProgress = false
     private var selectedCategory = EditorCategory.LIGHT
+    private var maskPreviewVisible = true
     private var selectedQuality = ExportQuality.HIGH
     private var selectedSize = ExportSize.ORIGINAL
+    private var selectedFormat = ExportFormat.JPEG
     private var sourceWidth = 0
     private var sourceHeight = 0
     private var suppressCropEvents = false
@@ -352,6 +365,7 @@ class MainActivity : Activity() {
         cropPanel = findViewById(R.id.cropPanel)
         qualitySpinner = findViewById(R.id.qualitySpinner)
         sizeSpinner = findViewById(R.id.sizeSpinner)
+        formatSpinner = findViewById(R.id.formatSpinner)
         outputSummary = findViewById(R.id.outputSummary)
         filterSpinner = findViewById(R.id.filterSpinner)
         filterSummary = findViewById(R.id.filterSummary)
@@ -379,6 +393,7 @@ class MainActivity : Activity() {
         cropHeightSeekBar = findViewById(R.id.cropHeightSeekBar)
         cropHorizontalSeekBar = findViewById(R.id.cropHorizontalSeekBar)
         cropVerticalSeekBar = findViewById(R.id.cropVerticalSeekBar)
+        straightenSeekBar = findViewById(R.id.straightenSeekBar)
         exportButton = findViewById(R.id.exportButton)
         exportProgress = findViewById(R.id.exportProgress)
         exportStatus = findViewById(R.id.exportStatus)
@@ -445,13 +460,17 @@ class MainActivity : Activity() {
                     val updatedLayer = selectedLayer.copy(
                         adjustments = selectedLayer.adjustments.copy(adjustments = updatedAdjustments)
                     )
-                    val updatedMasking = when (masking.selectedMask) {
-                        com.prabhat.photocraft.edit.MaskType.SUBJECT -> masking.copy(subject = updatedLayer)
-                        com.prabhat.photocraft.edit.MaskType.BACKGROUND -> masking.copy(background = updatedLayer)
-                    }
-                    if (editingState.updateMasking(updatedMasking, "Local Mask Adjustment")) {
+                    val updatedMasking = masking.updateSelected(updatedLayer)
+                    if (editingState.updateMasking(
+                            updatedMasking,
+                            getString(R.string.history_local_mask_adjustment,
+                                localizedMaskName(selectedLayer),
+                                getString(labelFor(adjustment)))
+                        )
+                    ) {
                         clearExportStatus()
                         requestPreviewRender()
+                        refreshHistory()
                         syncUiState()
                     }
                 } else {
@@ -464,6 +483,7 @@ class MainActivity : Activity() {
                     ) {
                         clearExportStatus()
                         requestPreviewRender()
+                        refreshHistory()
                         syncUiState()
                     }
                 }
@@ -500,6 +520,25 @@ class MainActivity : Activity() {
     }
 
     private fun setupSpinners() {
+        val formatAdapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            ExportFormat.entries.map { getString(formatLabel(it)) }
+        )
+        formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        formatSpinner.adapter = formatAdapter
+        formatSpinner.setSelection(selectedFormat.ordinal)
+        formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val format = ExportFormat.entries.getOrNull(position) ?: return
+                if (format == selectedFormat) return
+                selectedFormat = format
+                clearExportStatus()
+                syncUiState()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+
         val qualityAdapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_item,
@@ -606,6 +645,12 @@ class MainActivity : Activity() {
     }
 
     private fun setupCropControls() {
+        cropWidthSeekBar.setDefaultProgress(CropGeometry.PROGRESS_MAX)
+        cropHeightSeekBar.setDefaultProgress(CropGeometry.PROGRESS_MAX)
+        cropHorizontalSeekBar.setDefaultProgress(CropGeometry.PROGRESS_MAX / 2)
+        cropVerticalSeekBar.setDefaultProgress(CropGeometry.PROGRESS_MAX / 2)
+        straightenSeekBar.max = 200
+        straightenSeekBar.setDefaultProgress(100)
         val seekListener = object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(
                 seekBar: SeekBar?,
@@ -637,11 +682,144 @@ class MainActivity : Activity() {
         cropHeightSeekBar.setOnSeekBarChangeListener(seekListener)
         cropHorizontalSeekBar.setOnSeekBarChangeListener(seekListener)
         cropVerticalSeekBar.setOnSeekBarChangeListener(seekListener)
+        straightenSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser || suppressCropEvents || !canEditPhoto()) return
+                updateGeometry(editingState.state.geometry.copy(
+                    rotationDegrees = (progress - 100) / 10f
+                ))
+            }
+            override fun onStartTrackingTouch(bar: SeekBar?) {
+                if (canEditPhoto()) editingState.beginGesture()
+            }
+            override fun onStopTrackingTouch(bar: SeekBar?) {
+                editingState.endGesture()
+                applyCropControlsFromState()
+                syncUiState()
+            }
+        })
+        straightenSeekBar.onResetToDefault = {
+            straightenSeekBar.progress = 100
+            updateGeometry(editingState.state.geometry.copy(rotationDegrees = 0f))
+        }
+        listOf(
+            cropWidthSeekBar,
+            cropHeightSeekBar,
+            cropHorizontalSeekBar,
+            cropVerticalSeekBar
+        ).forEach { bar ->
+            bar.onResetToDefault = {
+                seekListener.onStartTrackingTouch(bar)
+                bar.resetProgressToDefault()
+                seekListener.onStopTrackingTouch(bar)
+            }
+        }
+        findViewById<Button>(R.id.rotateClockwiseButton).setOnClickListener {
+            updateGeometry(editingState.state.geometry.rotateClockwise())
+        }
+        findViewById<Button>(R.id.flipHorizontalButton).setOnClickListener {
+            val geometry = editingState.state.geometry
+            updateGeometry(geometry.copy(flipHorizontal = !geometry.flipHorizontal))
+        }
+        findViewById<Button>(R.id.flipVerticalButton).setOnClickListener {
+            val geometry = editingState.state.geometry
+            updateGeometry(geometry.copy(flipVertical = !geometry.flipVertical))
+        }
         applyCropControlsFromState()
     }
 
+    private fun updateGeometry(geometry: com.prabhat.photocraft.edit.GeometrySettings) {
+        if (editingState.updateGeometry(geometry, getString(R.string.history_geometry))) {
+            clearExportStatus()
+            requestPreviewRender()
+            syncUiState()
+        }
+    }
 
-    private enum class GradeRegion { SHADOWS, MIDTONES, HIGHLIGHTS }
+    private fun displayToSourcePoint(x: Float, y: Float): Pair<Float, Float> {
+        val bitmap = sourceBitmap ?: return x to y
+        val geometry = editingState.state.geometry
+        val (displayWidth, displayHeight) = geometry.outputDimensions(bitmap.width, bitmap.height)
+        val radians = Math.toRadians(geometry.rotationDegrees.toDouble())
+        val dx = x - displayWidth / 2f
+        val dy = y - displayHeight / 2f
+        var sourceX = (kotlin.math.cos(radians) * dx + kotlin.math.sin(radians) * dy + bitmap.width / 2f).toFloat()
+        var sourceY = (-kotlin.math.sin(radians) * dx + kotlin.math.cos(radians) * dy + bitmap.height / 2f).toFloat()
+        if (geometry.flipHorizontal) sourceX = bitmap.width - 1f - sourceX
+        if (geometry.flipVertical) sourceY = bitmap.height - 1f - sourceY
+        return sourceX.coerceIn(0f, bitmap.width - 1f) to
+            sourceY.coerceIn(0f, bitmap.height - 1f)
+    }
+
+
+    private enum class GradeRegion { SHADOWS, MIDTONES, HIGHLIGHTS, GLOBAL }
+    private var selectedGradeRegion = GradeRegion.SHADOWS
+    private var gradeWheelView: ColorGradingWheelView? = null
+
+    private fun localizedHslColor(color: HslColor): String = getString(
+        when (color) {
+            HslColor.RED -> R.string.hsl_red
+            HslColor.ORANGE -> R.string.hsl_orange
+            HslColor.YELLOW -> R.string.hsl_yellow
+            HslColor.GREEN -> R.string.hsl_green
+            HslColor.CYAN -> R.string.hsl_cyan
+            HslColor.BLUE -> R.string.hsl_blue
+            HslColor.PURPLE -> R.string.hsl_purple
+            HslColor.MAGENTA -> R.string.hsl_magenta
+        }
+    )
+
+    private fun localizedGradeRegion(region: GradeRegion): String = getString(
+        when (region) {
+            GradeRegion.SHADOWS -> R.string.grade_shadows
+            GradeRegion.MIDTONES -> R.string.grade_midtones
+            GradeRegion.HIGHLIGHTS -> R.string.grade_highlights
+            GradeRegion.GLOBAL -> R.string.grade_global
+        }
+    )
+
+    private fun localizedMaskName(layer: com.prabhat.photocraft.edit.MaskLayer): String =
+        localizedMaskType(layer.type)
+
+    private fun localizedMaskType(type: com.prabhat.photocraft.edit.MaskType): String =
+        getString(
+            when (type) {
+                com.prabhat.photocraft.edit.MaskType.SUBJECT -> R.string.mask_layer_subject
+                com.prabhat.photocraft.edit.MaskType.BACKGROUND -> R.string.mask_layer_background
+                com.prabhat.photocraft.edit.MaskType.BRUSH -> R.string.mask_layer_brush
+                com.prabhat.photocraft.edit.MaskType.LINEAR_GRADIENT -> R.string.mask_layer_linear_gradient
+                com.prabhat.photocraft.edit.MaskType.RADIAL_GRADIENT -> R.string.mask_layer_radial_gradient
+                com.prabhat.photocraft.edit.MaskType.COLOR_RANGE -> R.string.mask_layer_color_range
+                com.prabhat.photocraft.edit.MaskType.LUMINANCE_RANGE -> R.string.mask_layer_luminance_range
+                com.prabhat.photocraft.edit.MaskType.SKY -> R.string.mask_layer_sky
+                com.prabhat.photocraft.edit.MaskType.LANDSCAPE -> R.string.mask_layer_landscape
+                com.prabhat.photocraft.edit.MaskType.PEOPLE -> R.string.mask_layer_people
+                com.prabhat.photocraft.edit.MaskType.OBJECT -> R.string.mask_layer_object
+            }
+        )
+
+    private fun localizedMaskTool(tool: String): String = getString(
+        when (tool) {
+            "Eraser" -> R.string.mask_eraser
+            "Heal" -> R.string.mask_heal
+            "Linear Gradient" -> R.string.mask_tool_linear_gradient
+            "Radial Gradient" -> R.string.mask_tool_radial_gradient
+            "Color Range" -> R.string.mask_tool_color_range
+            "Luminance Range" -> R.string.mask_tool_luminance_range
+            else -> R.string.mask_brush
+        }
+    )
+
+    private fun localizedMaskCombineMode(
+        mode: com.prabhat.photocraft.edit.MaskCombineMode
+    ): String = getString(
+        when (mode) {
+            com.prabhat.photocraft.edit.MaskCombineMode.REPLACE -> R.string.mask_combine_replace
+            com.prabhat.photocraft.edit.MaskCombineMode.ADD -> R.string.mask_combine_add
+            com.prabhat.photocraft.edit.MaskCombineMode.SUBTRACT -> R.string.mask_combine_subtract
+            com.prabhat.photocraft.edit.MaskCombineMode.INTERSECT -> R.string.mask_combine_intersect
+        }
+    )
 
     private fun setupAdvancedControls() {
         gradingControls.removeAllViews()
@@ -651,33 +829,92 @@ class MainActivity : Activity() {
         advancedLabelTitles.clear()
 
         for (region in GradeRegion.entries) {
-            val initial = gradeFor(editingState.state.colorGrading, region)
-            val title = region.name.lowercase().replaceFirstChar { it.uppercase() }
-            addAdvancedSlider(
-                gradingControls, "grade_${region.name}_hue", "$title · Hue",
-                -180, 180, initial.hue
-            ) { value ->
-                val state = editingState.state.colorGrading
-                updateColorGrading(withGrade(state, region, gradeFor(state, region).copy(hue = value)))
+            val button = Button(this).apply {
+                text = localizedGradeRegion(region)
+                isAllCaps = false
+                isSelected = region == selectedGradeRegion
+                alpha = if (isSelected) 1f else 0.72f
+                contentDescription = getString(
+                    R.string.grade_region_select,
+                    localizedGradeRegion(region)
+                )
+                setOnClickListener {
+                    selectedGradeRegion = region
+                    gradingRegionButtons.forEach { (candidate, candidateButton) ->
+                        candidateButton.isSelected = candidate == region
+                        candidateButton.alpha = if (candidateButton.isSelected) 1f else 0.72f
+                    }
+                    val grade = gradeFor(editingState.state.colorGrading, region)
+                    gradeWheelView?.setGrade(grade)
+                    gradeWheelView?.contentDescription = getString(
+                        R.string.grade_wheel_description,
+                        localizedGradeRegion(region),
+                        grade.hue,
+                        grade.amount
+                    )
+                    advancedSeekBars["grade_luminance"]?.progress = grade.luminance + 100
+                    advancedLabels["grade_luminance"]?.text = getString(
+                        R.string.advanced_slider_value,
+                        advancedLabelTitles["grade_luminance"] ?: "Luminance",
+                        grade.luminance
+                    )
+                }
             }
-            addAdvancedSlider(
-                gradingControls, "grade_${region.name}_amount", "$title · Amount",
-                0, 100, initial.amount
-            ) { value ->
-                val state = editingState.state.colorGrading
-                updateColorGrading(withGrade(state, region, gradeFor(state, region).copy(amount = value)))
+            gradingRegionButtons[region] = button
+            regionRow.addView(button, LinearLayout.LayoutParams(0, dp(48), 1f))
+        }
+        gradingControls.addView(regionRow)
+
+        val initialGrade = gradeFor(editingState.state.colorGrading, selectedGradeRegion)
+        val gradeWheel = ColorGradingWheelView(this).apply {
+            id = R.id.colorGradingWheel
+            setGrade(initialGrade)
+            contentDescription = getString(
+                R.string.grade_wheel_description,
+                localizedGradeRegion(selectedGradeRegion),
+                initialGrade.hue,
+                initialGrade.amount
+            )
+            setOnGradeGestureListener(
+                onStart = { if (canEditPhoto()) editingState.beginGesture() },
+                onEnd = {
+                    if (canEditPhoto()) {
+                        editingState.endGesture()
+                        refreshHistory()
+                        syncUiState()
+                    }
+                }
+            )
+            setOnGradeChangedListener { grade ->
+                if (canEditPhoto()) {
+                    val state = editingState.state.colorGrading
+                    updateColorGrading(withGrade(state, selectedGradeRegion, grade))
+                }
             }
-            addAdvancedSlider(
-                gradingControls, "grade_${region.name}_lum", "$title · Luminance",
-                -100, 100, initial.luminance
-            ) { value ->
-                val state = editingState.state.colorGrading
-                updateColorGrading(withGrade(state, region, gradeFor(state, region).copy(luminance = value)))
-            }
+        }
+        gradeWheelView = gradeWheel
+        gradingControls.addView(gradeWheel, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(250)
+        ))
+        addAdvancedSlider(
+            gradingControls,
+            "grade_luminance",
+            getString(R.string.grade_luminance),
+            -100,
+            100,
+            initialGrade.luminance
+        ) { value ->
+            val state = editingState.state.colorGrading
+            updateColorGrading(withGrade(
+                state,
+                selectedGradeRegion,
+                gradeFor(state, selectedGradeRegion).copy(luminance = value)
+            ))
         }
 
         addAdvancedSlider(
-            gradingControls, "grade_balance", "Balance",
+            gradingControls, "grade_balance", getString(R.string.advanced_balance),
             -100, 100, editingState.state.colorGrading.balance
         ) { value ->
             updateColorGrading(editingState.state.colorGrading.copy(balance = value))
@@ -691,34 +928,114 @@ class MainActivity : Activity() {
         }
 
         addAdvancedSlider(
-            effectsControls, "effect_texture", "Texture",
+            effectsControls, "effect_texture", getString(R.string.advanced_texture),
             -100, 100, editingState.state.effects.texture
         ) { value ->
             updateEffects(editingState.state.effects.copy(texture = value))
         }
         addAdvancedSlider(
-            effectsControls, "effect_sharpness", "Sharpness",
+            effectsControls, "effect_sharpness", getString(R.string.advanced_sharpness),
             -100, 100, editingState.state.effects.sharpness
         ) { value ->
             updateEffects(editingState.state.effects.copy(sharpness = value))
         }
         addAdvancedSlider(
-            effectsControls, "effect_details", "Details",
+            effectsControls, "effect_sharpening_radius", getString(R.string.sharpening_radius),
+            1, 5, editingState.state.effects.sharpeningRadius, defaultValue = 1
+        ) { value -> updateEffects(editingState.state.effects.copy(sharpeningRadius = value)) }
+        addAdvancedSlider(
+            effectsControls, "effect_sharpening_detail", getString(R.string.sharpening_detail),
+            0, 100, editingState.state.effects.sharpeningDetail
+        ) { value -> updateEffects(editingState.state.effects.copy(sharpeningDetail = value)) }
+        addAdvancedSlider(
+            effectsControls, "effect_sharpening_masking", getString(R.string.sharpening_masking),
+            0, 100, editingState.state.effects.sharpeningMasking
+        ) { value -> updateEffects(editingState.state.effects.copy(sharpeningMasking = value)) }
+        addAdvancedSlider(
+            effectsControls, "effect_details", getString(R.string.advanced_details),
             -100, 100, editingState.state.effects.details
         ) { value ->
             updateEffects(editingState.state.effects.copy(details = value))
         }
         addAdvancedSlider(
-            effectsControls, "effect_vignette", "Vignette",
+            effectsControls, "effect_vignette", getString(R.string.advanced_vignette),
             -100, 100, editingState.state.effects.vignette
         ) { value ->
             updateEffects(editingState.state.effects.copy(vignette = value))
         }
         addAdvancedSlider(
-            effectsControls, "effect_noise", "Noise Reduction",
+            effectsControls, "effect_noise", getString(R.string.advanced_noise_reduction),
             -100, 100, editingState.state.effects.noiseReduction
         ) { value ->
             updateEffects(editingState.state.effects.copy(noiseReduction = value))
+        }
+        addAdvancedSlider(
+            effectsControls, "effect_background_blur", getString(R.string.advanced_lens_blur),
+            0, 100, editingState.state.effects.backgroundBlur
+        ) { value -> updateEffects(editingState.state.effects.copy(backgroundBlur = value)) }
+        effectsControls.addView(Button(this).apply {
+            text = getString(R.string.mask_subject_for_blur)
+            contentDescription = getString(R.string.mask_subject_for_blur)
+            setOnClickListener { generateBackgroundMaskForBlur() }
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
+        val curveChannels = listOf(
+            "master" to R.string.curve_master,
+            "red" to R.string.curve_red,
+            "green" to R.string.curve_green,
+            "blue" to R.string.curve_blue
+        )
+        val curvePoints = listOf(
+            "shadows" to R.string.curve_shadows,
+            "quartertones" to R.string.curve_quartertones,
+            "midtones" to R.string.curve_midtones,
+            "threeQuartertones" to R.string.curve_three_quartertones,
+            "highlights" to R.string.curve_highlights
+        )
+        curveChannels.forEach { (channel, channelTitle) ->
+            curvePoints.forEachIndexed { index, (point, pointTitle) ->
+                val initial = editingState.state.curves.run {
+                    when (channel) {
+                        "master" -> master
+                        "red" -> red
+                        "green" -> green
+                        else -> blue
+                    }.points()[index]
+                }
+                val key = "curve_${channel}_$point"
+                val title = getString(R.string.curve_slider_title,
+                    getString(channelTitle), getString(pointTitle))
+                addAdvancedSlider(effectsControls, key, title, 0, 100, initial,
+                    defaultValue = (index * 25)) { value ->
+                    val current = editingState.state.curves
+                    val oldCurve = when (channel) {
+                        "master" -> current.master
+                        "red" -> current.red
+                        "green" -> current.green
+                        else -> current.blue
+                    }
+                    val points = oldCurve.points().also { it[index] = value }
+                    val updatedCurve = com.prabhat.photocraft.edit.ToneCurves.fromValues(
+                        IntArray(20).also { all ->
+                            current.values().copyInto(all)
+                            val offset = when (channel) {
+                                "master" -> 0
+                                "red" -> 5
+                                "green" -> 10
+                                else -> 15
+                            }
+                            points.copyInto(all, offset)
+                        }
+                    )
+                    if (editingState.updateCurves(updatedCurve, getString(R.string.history_curves))) {
+                        requestPreviewRender()
+                        syncUiState()
+                    }
+                }
+            }
         }
 
         applyAdvancedControlsFromState()
@@ -775,10 +1092,11 @@ class MainActivity : Activity() {
             textSize = 13f
             setTextColor(getColor(R.color.text_secondary))
         }
-        val seekBar = SeekBar(this).apply {
+        val seekBar = ResettableSeekBar(this).apply {
             this.max = maximum - minimum
             progress = (initialValue - minimum).coerceIn(0, maximum - minimum)
-            contentDescription = title
+            setDefaultProgress(defaultValue - minimum)
+            contentDescription = getString(R.string.advanced_slider_description, title)
         }
         advancedSeekBars[key] = seekBar
         advancedLabels[key] = label
@@ -798,7 +1116,7 @@ class MainActivity : Activity() {
 
         fun currentValue(): Int = seekBar.progress + minimum
         fun showValue(value: Int) {
-            label.text = "$title: $value"
+            label.text = getString(R.string.advanced_slider_value, title, value)
         }
         showValue(initialValue)
 
@@ -861,6 +1179,7 @@ class MainActivity : Activity() {
             GradeRegion.SHADOWS -> settings.shadows
             GradeRegion.MIDTONES -> settings.midtones
             GradeRegion.HIGHLIGHTS -> settings.highlights
+            GradeRegion.GLOBAL -> settings.global
         }
 
     private fun withGrade(
@@ -871,10 +1190,11 @@ class MainActivity : Activity() {
         GradeRegion.SHADOWS -> settings.copy(shadows = grade)
         GradeRegion.MIDTONES -> settings.copy(midtones = grade)
         GradeRegion.HIGHLIGHTS -> settings.copy(highlights = grade)
+        GradeRegion.GLOBAL -> settings.copy(global = grade)
     }
 
     private fun updateColorGrading(settings: ColorGradingSettings) {
-        if (editingState.updateColorGrading(settings, "Color Grading / HSL")) {
+        if (editingState.updateColorGrading(settings, getString(R.string.history_color_grading))) {
             clearExportStatus()
             requestPreviewRender()
             syncUiState()
@@ -883,22 +1203,58 @@ class MainActivity : Activity() {
     }
 
     private fun updateEffects(effects: PhotoEffects) {
-        if (editingState.updateEffects(effects, "Photo Effects")) {
+        if (editingState.updateEffects(effects, getString(R.string.history_photo_effects))) {
             clearExportStatus()
             requestPreviewRender()
             syncUiState()
         }
     }
 
+    private fun generateBackgroundMaskForBlur() {
+        val bitmap = sourceBitmap ?: return
+        findViewById<TextView>(R.id.maskStatusText)?.setText(R.string.mask_detecting_subject)
+        activityScope.launch {
+            try {
+                val subject = selfieMaskSegmenter.createMask(bitmap)
+                val backgroundCoverage = ByteArray(subject.coverage.size) { index ->
+                    (255 - (subject.coverage[index].toInt() and 0xFF)).toByte()
+                }
+                val background = com.prabhat.photocraft.edit.MaskSelection(
+                    subject.width, subject.height, backgroundCoverage
+                )
+                val current = editingState.state.masking
+                val state = current.copy(
+                    subject = current.subject.copy(selection = subject),
+                    background = current.background.copy(selection = background, inverted = false)
+                )
+                editingState.updateMasking(state, getString(R.string.history_auto_select_mask,
+                    getString(R.string.advanced_lens_blur)))
+                clearExportStatus()
+                requestPreviewRender()
+                syncUiState()
+            } catch (error: Exception) {
+                findViewById<TextView>(R.id.maskStatusText)?.text = getString(
+                    R.string.mask_detection_failed,
+                    error.message ?: getString(R.string.mask_try_again)
+                )
+            }
+        }
+    }
+
     private fun applyAdvancedControlsFromState() {
         val grading = editingState.state.colorGrading
         val effects = editingState.state.effects
+        val curves = editingState.state.curves
 
         fun setValue(key: String, value: Int, minimum: Int) {
             val bar = advancedSeekBars[key] ?: return
             val safe = (value - minimum).coerceIn(0, bar.max)
             if (bar.progress != safe) bar.progress = safe
-            advancedLabels[key]?.text = "${advancedLabelTitles[key] ?: key}: $value"
+            advancedLabels[key]?.text = getString(
+                R.string.advanced_slider_value,
+                advancedLabelTitles[key] ?: key,
+                value
+            )
         }
 
         for (region in GradeRegion.entries) {
@@ -907,13 +1263,34 @@ class MainActivity : Activity() {
             setValue("grade_${region.name}_amount", grade.amount, 0)
             setValue("grade_${region.name}_lum", grade.luminance, -100)
         }
+        val selectedGrade = gradeFor(grading, selectedGradeRegion)
+        gradeWheelView?.setGrade(selectedGrade)
+        gradeWheelView?.contentDescription = getString(
+            R.string.grade_wheel_description,
+            localizedGradeRegion(selectedGradeRegion),
+            selectedGrade.hue,
+            selectedGrade.amount
+        )
+        setValue("grade_luminance", selectedGrade.luminance, -100)
         setValue("grade_balance", grading.balance, -100)
         setValue("grade_blending", grading.blending, 0)
         setValue("effect_texture", effects.texture, -100)
         setValue("effect_sharpness", effects.sharpness, -100)
+        setValue("effect_sharpening_radius", effects.sharpeningRadius, 1)
+        setValue("effect_sharpening_detail", effects.sharpeningDetail, 0)
+        setValue("effect_sharpening_masking", effects.sharpeningMasking, 0)
         setValue("effect_details", effects.details, -100)
         setValue("effect_vignette", effects.vignette, -100)
         setValue("effect_noise", effects.noiseReduction, -100)
+        setValue("effect_background_blur", effects.backgroundBlur, 0)
+        val names = listOf("master", "red", "green", "blue")
+        val channelCurves = listOf(curves.master, curves.red, curves.green, curves.blue)
+        val points = listOf("shadows", "quartertones", "midtones", "threeQuartertones", "highlights")
+        channelCurves.forEachIndexed { channelIndex, curve ->
+            curve.points().forEachIndexed { pointIndex, value ->
+                setValue("curve_${names[channelIndex]}_${points[pointIndex]}", value, 0)
+            }
+        }
     }
 
     private fun setupFilterControls() {
@@ -957,8 +1334,8 @@ class MainActivity : Activity() {
 
         filterIntensitySeekBar.max = FilterSettings.MAX_INTENSITY
         filterIntensitySeekBar.progress = editingState.filter.intensity
-        filterIntensitySeekBar.setOnSeekBarChangeListener(
-            object : SeekBar.OnSeekBarChangeListener {
+        filterIntensitySeekBar.setDefaultProgress(FilterSettings.DEFAULT_INTENSITY)
+        val filterSeekListener = object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(
                     seekBar: SeekBar?,
                     progress: Int,
@@ -996,7 +1373,14 @@ class MainActivity : Activity() {
                     syncUiState()
                 }
             }
-        )
+        filterIntensitySeekBar.setOnSeekBarChangeListener(filterSeekListener)
+        filterIntensitySeekBar.onResetToDefault = {
+            if (canEditPhoto()) {
+                filterSeekListener.onStartTrackingTouch(filterIntensitySeekBar)
+                filterIntensitySeekBar.resetProgressToDefault()
+                filterSeekListener.onStopTrackingTouch(filterIntensitySeekBar)
+            }
+        }
         updateFilterFeedback()
     }
 
@@ -1279,16 +1663,10 @@ class MainActivity : Activity() {
 
 
 
-    private fun setupLocalMaskAdjustmentControls(
-        container: LinearLayout,
-        type: com.prabhat.photocraft.edit.MaskType
-    ) {
+    private fun setupLocalMaskAdjustmentControls(container: LinearLayout) {
         val initialMasking = editingState.state.masking
-        val initialLayer = if (type == com.prabhat.photocraft.edit.MaskType.SUBJECT) {
-            initialMasking.subject
-        } else {
-            initialMasking.background
-        }
+        val initialLayer = initialMasking.selected()
+        container.removeAllViews()
 
         fun addGroupTitle(title: String) {
             container.addView(TextView(this).apply {
@@ -1314,10 +1692,15 @@ class MainActivity : Activity() {
                 textSize = 13f
                 setTextColor(getColor(R.color.text_secondary))
             }
-            val seek = SeekBar(this).apply {
+            val seek = ResettableSeekBar(this).apply {
                 max = 200
                 progress = initial + 100
-                contentDescription = "${type.name} ${adjustment.name}"
+                setDefaultProgress(100)
+                contentDescription = getString(
+                    R.string.mask_local_adjustment_description,
+                    localizedMaskName(initialLayer),
+                    getString(labelFor(adjustment))
+                )
             }
 
             fun showValue(value: Int) {
@@ -1382,7 +1765,11 @@ class MainActivity : Activity() {
                 }
 
                 override fun onStopTrackingTouch(bar: SeekBar?) {
-                    if (canEditPhoto()) editingState.endGesture()
+                    if (canEditPhoto()) {
+                        editingState.endGesture()
+                        refreshHistory()
+                        syncUiState()
+                    }
                 }
             })
             attachDoubleTapReset(seek) { resetToDefault() }
@@ -1401,17 +1788,205 @@ class MainActivity : Activity() {
             ))
         }
 
-        addGroupTitle("LIGHT")
+        addGroupTitle(getString(R.string.section_light))
         com.prabhat.photocraft.edit.Adjustment.values()
             .filter { it.group ==
                 com.prabhat.photocraft.edit.AdjustmentGroup.LIGHT }
             .forEach { addAdjustment(it) }
 
-        addGroupTitle("COLOR")
+        addGroupTitle(getString(R.string.section_color))
         com.prabhat.photocraft.edit.Adjustment.values()
             .filter { it.group ==
                 com.prabhat.photocraft.edit.AdjustmentGroup.COLOR }
             .forEach { addAdjustment(it) }
+
+        addGroupTitle(getString(R.string.color_grading_title))
+        var localGradeRegion = GradeRegion.SHADOWS
+        fun updateLocalColorGrading(next: ColorGradingSettings) {
+            if (!canEditPhoto()) return
+            val current = editingState.state.masking
+            val layer = current.layers.firstOrNull { it.id == initialLayer.id } ?: return
+            val updatedLayer = layer.copy(
+                adjustments = layer.adjustments.copy(colorGrading = next)
+            )
+            if (editingState.updateMasking(
+                    current.updateSelected(updatedLayer),
+                    getString(
+                        R.string.history_local_mask_adjustment,
+                        localizedMaskName(initialLayer),
+                        getString(R.string.color_grading_title)
+                    )
+                )
+            ) {
+                clearExportStatus()
+                requestPreviewRender()
+                refreshHistory()
+                syncUiState()
+            }
+        }
+
+        val localGradeTabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        val localGradeButtons = LinkedHashMap<GradeRegion, Button>()
+        var localLuminanceBar: ResettableSeekBar? = null
+        var localLuminanceLabel: TextView? = null
+        lateinit var localGradeWheel: ColorGradingWheelView
+
+        fun selectLocalGradeRegion(region: GradeRegion) {
+            localGradeRegion = region
+            localGradeButtons.forEach { (candidate, button) ->
+                button.isSelected = candidate == region
+                button.alpha = if (button.isSelected) 1f else 0.72f
+            }
+            val grade = gradeFor(
+                editingState.state.masking.selected().adjustments.colorGrading,
+                region
+            )
+            localGradeWheel.setGrade(grade)
+            localGradeWheel.contentDescription = getString(
+                R.string.grade_wheel_description,
+                localizedGradeRegion(region), grade.hue, grade.amount
+            )
+            localLuminanceBar?.progress = grade.luminance + 100
+            localLuminanceLabel?.text = getString(
+                R.string.advanced_slider_value,
+                getString(R.string.grade_luminance),
+                grade.luminance
+            )
+        }
+
+        GradeRegion.entries.forEach { region ->
+            val button = Button(this).apply {
+                text = localizedGradeRegion(region)
+                isAllCaps = false
+                isSelected = region == localGradeRegion
+                alpha = if (isSelected) 1f else 0.72f
+                contentDescription = getString(
+                    R.string.grade_region_select,
+                    localizedGradeRegion(region)
+                )
+                setOnClickListener { selectLocalGradeRegion(region) }
+            }
+            localGradeButtons[region] = button
+            localGradeTabs.addView(button, LinearLayout.LayoutParams(0, dp(48), 1f))
+        }
+        container.addView(localGradeTabs)
+
+        localGradeWheel = ColorGradingWheelView(this).apply {
+            id = R.id.maskColorGradingWheel
+            setGrade(gradeFor(initialLayer.adjustments.colorGrading, localGradeRegion))
+            contentDescription = getString(
+                R.string.grade_wheel_description,
+                localizedGradeRegion(localGradeRegion),
+                gradeFor(initialLayer.adjustments.colorGrading, localGradeRegion).hue,
+                gradeFor(initialLayer.adjustments.colorGrading, localGradeRegion).amount
+            )
+            setOnGradeGestureListener(
+                onStart = { if (canEditPhoto()) editingState.beginGesture() },
+                onEnd = {
+                    if (canEditPhoto()) {
+                        editingState.endGesture()
+                        refreshHistory()
+                        syncUiState()
+                    }
+                }
+            )
+            setOnGradeChangedListener { grade ->
+                val current = editingState.state.masking.selected().adjustments.colorGrading
+                updateLocalColorGrading(withGrade(current, localGradeRegion, grade))
+            }
+        }
+        container.addView(localGradeWheel, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(220)
+        ))
+
+        fun addLocalGradingSlider(
+            title: String,
+            minimum: Int,
+            maximum: Int,
+            initial: Int,
+            defaultValue: Int = 0,
+            onValueChanged: (Int) -> Unit
+        ): ResettableSeekBar {
+            val label = TextView(this).apply {
+                textSize = 13f
+                setTextColor(getColor(R.color.text_secondary))
+            }
+            val seek = ResettableSeekBar(this).apply {
+                max = maximum - minimum
+                progress = (initial - minimum).coerceIn(0, max)
+                setDefaultProgress(defaultValue - minimum)
+                contentDescription = getString(
+                    R.string.advanced_slider_description,
+                    title
+                )
+            }
+            fun showValue(value: Int) {
+                label.text = getString(R.string.advanced_slider_value, title, value)
+            }
+            showValue(initial)
+            seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val value = progress + minimum
+                    showValue(value)
+                    if (fromUser) onValueChanged(value)
+                }
+                override fun onStartTrackingTouch(bar: SeekBar?) {
+                    if (canEditPhoto()) editingState.beginGesture()
+                }
+                override fun onStopTrackingTouch(bar: SeekBar?) {
+                    if (canEditPhoto()) {
+                        editingState.endGesture()
+                        refreshHistory()
+                        syncUiState()
+                    }
+                }
+            })
+            seek.onResetToDefault = {
+                if (canEditPhoto()) {
+                    editingState.beginGesture()
+                    seek.resetProgressToDefault()
+                    onValueChanged(seek.progress + minimum)
+                    editingState.endGesture()
+                    refreshHistory()
+                    syncUiState()
+                }
+            }
+            container.addView(label)
+            container.addView(seek)
+            return seek
+        }
+
+        val initialLocalGrading = initialLayer.adjustments.colorGrading
+        val initialLocalGrade = gradeFor(initialLocalGrading, localGradeRegion)
+        localLuminanceBar = addLocalGradingSlider(
+            getString(R.string.grade_luminance), -100, 100,
+            initialLocalGrade.luminance
+        ) { value ->
+            val current = editingState.state.masking.selected().adjustments.colorGrading
+            updateLocalColorGrading(withGrade(
+                current, localGradeRegion,
+                gradeFor(current, localGradeRegion).copy(luminance = value)
+            ))
+        }
+        localLuminanceLabel = container.getChildAt(container.childCount - 2) as TextView
+        addLocalGradingSlider(
+            getString(R.string.advanced_balance), -100, 100,
+            initialLocalGrading.balance
+        ) { value ->
+            val current = editingState.state.masking.selected().adjustments.colorGrading
+            updateLocalColorGrading(current.copy(balance = value))
+        }
+        addLocalGradingSlider(
+            getString(R.string.advanced_blending), 0, 100,
+            initialLocalGrading.blending,
+            ColorGradingSettings.DEFAULT_BLENDING
+        ) { value ->
+            val current = editingState.state.masking.selected().adjustments.colorGrading
+            updateLocalColorGrading(current.copy(blending = value))
+        }
     }
 
     private fun setupMaskingControls() {
@@ -1979,32 +2554,39 @@ class MainActivity : Activity() {
     }
 
     private fun setupComparisonControl() {
-        compareButton.setOnClickListener { }
-        compareButton.setOnTouchListener { view, event ->
+        compareButton.setOnClickListener {
+            if (compareTouchInProgress || !canEditPhoto()) return@setOnClickListener
+            if (compareHeld) endCompare() else beginCompare()
+        }
+        compareButton.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     if (compareHeld || !canEditPhoto() || sourceBitmap == null) {
                         return@setOnTouchListener false
                     }
-                    view.isPressed = true
+                    compareTouchInProgress = true
+                    compareButton.isPressed = true
                     beginCompare()
                     true
                 }
 
                 MotionEvent.ACTION_UP -> {
                     if (!compareHeld) {
-                        view.isPressed = false
+                        compareButton.isPressed = false
+                        compareTouchInProgress = false
                         return@setOnTouchListener false
                     }
-                    view.isPressed = false
+                    compareButton.isPressed = false
                     endCompare()
-                    view.performClick()
+                    compareButton.performClick()
+                    compareTouchInProgress = false
                     true
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
-                    view.isPressed = false
+                    compareButton.isPressed = false
                     endCompare()
+                    compareTouchInProgress = false
                     true
                 }
 
@@ -2023,6 +2605,7 @@ class MainActivity : Activity() {
             return
         }
         compareHeld = true
+        compareButton.contentDescription = getString(R.string.compare_showing_original)
         applyDisplayedBitmap()
     }
 
@@ -2031,6 +2614,9 @@ class MainActivity : Activity() {
             return
         }
         compareHeld = false
+        if (::compareButton.isInitialized) {
+            compareButton.contentDescription = getString(R.string.compare_showing_edited)
+        }
         if (::compareButton.isInitialized) {
             compareButton.isPressed = false
         }
@@ -2053,6 +2639,9 @@ class MainActivity : Activity() {
         suppressCategoryEvents = false
 
         val hasPhoto = sourceBitmap != null
+        previewImage.setMaskInteractionEnabled(
+            hasPhoto && selectedCategory == EditorCategory.MASKING && !compareHeld
+        )
         editorToolbar.visibility = if (hasPhoto) View.VISIBLE else View.GONE
         lightPanel.visibility =
             if (selectedCategory == EditorCategory.LIGHT) View.VISIBLE else View.GONE
@@ -2147,7 +2736,7 @@ class MainActivity : Activity() {
         closeMixPanel()
         endCompare()
         val request = buildExportRequest() ?: return
-        val suggestedName = ExportNaming.suggestedFileName(currentDisplayName)
+        val suggestedName = ExportNaming.suggestedFileName(currentDisplayName, selectedFormat.extension)
 
         pendingExportRequest = request
         pendingDestinationTitle = null
@@ -2163,7 +2752,7 @@ class MainActivity : Activity() {
         exportPickerStartedAtMs = System.currentTimeMillis()
         try {
             startActivityForResult(
-                ExportPicker.createDocumentIntent(suggestedName),
+                ExportPicker.createDocumentIntent(suggestedName, selectedFormat),
                 REQUEST_CREATE_JPEG
             )
         } catch (_: ActivityNotFoundException) {
@@ -2427,8 +3016,8 @@ class MainActivity : Activity() {
     }
 
     private fun buildExportRequest(): ExportRequest? {
-        val width = currentSourceWidth()
-        val height = currentSourceHeight()
+        val width = sourceWidth.takeIf { it > 0 } ?: sourceBitmap?.width ?: 0
+        val height = sourceHeight.takeIf { it > 0 } ?: sourceBitmap?.height ?: 0
         if (width <= 0 || height <= 0) {
             return null
         }
@@ -2442,7 +3031,10 @@ class MainActivity : Activity() {
             sourceWidth = width,
             sourceHeight = height,
             masking = editingState.state.masking,
-            effects = editingState.state.effects
+            effects = editingState.state.effects,
+            curves = editingState.state.curves,
+            format = selectedFormat,
+            geometry = editingState.state.geometry
         )
     }
 
@@ -2547,6 +3139,9 @@ class MainActivity : Activity() {
 
         sourceBitmap = result.bitmap
         adjustedBitmap = null
+        if (resetEdits || previousUri != uri) {
+            previewImage.resetZoom()
+        }
         currentDisplayName = result.displayName
         sourceWidth = result.sourceWidth.takeIf { it > 0 } ?: result.bitmap.width
         sourceHeight = result.sourceHeight.takeIf { it > 0 } ?: result.bitmap.height
@@ -2636,7 +3231,7 @@ class MainActivity : Activity() {
         renderer.request(
             source, editingState.adjustments, editingState.filter,
             editingState.state.effects, editingState.state.colorGrading,
-            editingState.state.masking
+            editingState.state.curves, editingState.state.geometry, editingState.state.masking
         ) { result ->
             if (isDestroyed || isFinishing || sourceBitmap !== source) {
                 return@request
@@ -2726,6 +3321,8 @@ class MainActivity : Activity() {
             ?: getString(R.string.preview_untitled)
         previewImage.contentDescription = if (compareHeld) {
             getString(R.string.preview_content_description_original, displayName)
+        } else if (selectedCategory == EditorCategory.MASKING) {
+            getString(R.string.mask_canvas_description_named, displayName)
         } else {
             getString(R.string.preview_content_description_named, displayName)
         }
@@ -2802,6 +3399,8 @@ class MainActivity : Activity() {
                 CropGeometry.centerY(crop),
                 crop.height
             )
+            straightenSeekBar.progress =
+                (editingState.state.geometry.rotationDegrees * 10f).toInt().coerceIn(-100, 100) + 100
 
             cropWidthLabel.setText(
                 if (ratio.isFixed) R.string.crop_size_label else R.string.crop_width_label
@@ -2876,23 +3475,27 @@ class MainActivity : Activity() {
             (crop.height * 100f).roundToInt(),
             getString(ratioLabel(ratio))
         )
-        cropWidthSeekBar.contentDescription = getString(
-            R.string.crop_control_description,
+        cropWidthSeekBar.contentDescription = resources.getQuantityString(
+            R.plurals.percent_value,
+            progressPercent(cropWidthSeekBar.progress),
             cropWidthLabel.text,
             progressPercent(cropWidthSeekBar.progress)
         )
-        cropHeightSeekBar.contentDescription = getString(
-            R.string.crop_control_description,
+        cropHeightSeekBar.contentDescription = resources.getQuantityString(
+            R.plurals.percent_value,
+            progressPercent(cropHeightSeekBar.progress),
             getString(R.string.crop_height_label),
             progressPercent(cropHeightSeekBar.progress)
         )
-        cropHorizontalSeekBar.contentDescription = getString(
-            R.string.crop_control_description,
+        cropHorizontalSeekBar.contentDescription = resources.getQuantityString(
+            R.plurals.percent_value,
+            progressPercent(cropHorizontalSeekBar.progress),
             getString(R.string.crop_horizontal_label),
             progressPercent(cropHorizontalSeekBar.progress)
         )
-        cropVerticalSeekBar.contentDescription = getString(
-            R.string.crop_control_description,
+        cropVerticalSeekBar.contentDescription = resources.getQuantityString(
+            R.plurals.percent_value,
+            progressPercent(cropVerticalSeekBar.progress),
             getString(R.string.crop_vertical_label),
             progressPercent(cropVerticalSeekBar.progress)
         )
@@ -2927,11 +3530,21 @@ class MainActivity : Activity() {
     private fun canEditPhoto(): Boolean =
         sourceBitmap != null && !loadingPhoto && !exportGate.isExporting
 
-    private fun currentSourceWidth(): Int =
-        sourceWidth.takeIf { it > 0 } ?: sourceBitmap?.width ?: 0
+    private fun currentSourceWidth(): Int {
+        val width = sourceWidth.takeIf { it > 0 } ?: sourceBitmap?.width ?: 0
+        val height = sourceHeight.takeIf { it > 0 } ?: sourceBitmap?.height ?: 0
+        return if (width > 0 && height > 0) {
+            editingState.state.geometry.outputDimensions(width, height).first
+        } else width
+    }
 
-    private fun currentSourceHeight(): Int =
-        sourceHeight.takeIf { it > 0 } ?: sourceBitmap?.height ?: 0
+    private fun currentSourceHeight(): Int {
+        val width = sourceWidth.takeIf { it > 0 } ?: sourceBitmap?.width ?: 0
+        val height = sourceHeight.takeIf { it > 0 } ?: sourceBitmap?.height ?: 0
+        return if (width > 0 && height > 0) {
+            editingState.state.geometry.outputDimensions(width, height).second
+        } else height
+    }
 
     private fun progressPercent(progress: Int): Int =
         (progress * 100f / CropGeometry.PROGRESS_MAX).roundToInt()
@@ -2955,6 +3568,7 @@ class MainActivity : Activity() {
         val exporting = exportGate.isExporting
         val busy = loadingPhoto || exporting
         val canEdit = hasPhoto && !busy
+        gradeWheelView?.isEnabled = canEdit
         if (compareHeld && !canEdit) {
             endCompare()
         }
@@ -2976,9 +3590,10 @@ class MainActivity : Activity() {
         errorRetryButton.isEnabled = !busy
         exportButton.isEnabled = canEdit
         exportButton.setText(
-            if (exporting) R.string.exporting else R.string.export_jpeg
+            if (exporting) R.string.exporting else formatLabel(selectedFormat)
         )
-        qualitySpinner.isEnabled = canEdit
+        formatSpinner.isEnabled = canEdit
+        qualitySpinner.isEnabled = canEdit && selectedFormat == ExportFormat.JPEG
         sizeSpinner.isEnabled = canEdit
         filterSpinner.isEnabled = canEdit
         filterIntensitySeekBar.isEnabled =
@@ -3021,6 +3636,11 @@ class MainActivity : Activity() {
             closeMixPanel()
         }
         applyCategoryVisibility()
+        previewImage.setMaskSelection(
+            if (maskPreviewVisible && hasPhoto && selectedCategory == EditorCategory.MASKING && !compareHeld) {
+                editingState.state.masking.transformed(editingState.state.geometry).selected().selection
+            } else null
+        )
         if (!hasPhoto) {
             outputSummary.text = ""
         }
@@ -3029,7 +3649,8 @@ class MainActivity : Activity() {
     private fun showError(message: String, actionLabel: Int, action: (() -> Unit)?) {
         hideActionSheet()
         val fullMessage = if (sourceBitmap != null) {
-            message + "\n" + getString(R.string.error_current_photo_kept)
+            getString(R.string.error_with_current_photo_kept, message,
+                getString(R.string.error_current_photo_kept))
         } else {
             message
         }
@@ -3089,8 +3710,14 @@ class MainActivity : Activity() {
 
         val restoredM5 = M5StateCodec.decode(savedState.getIntArray(STATE_M5_EDIT_STATE))
         if (restoredM5 != null) {
-            val undo = M5StateCodec.decodeStack(savedState.getIntArray(STATE_M5_UNDO))
-            val redo = M5StateCodec.decodeStack(savedState.getIntArray(STATE_M5_REDO))
+            val undo = restoreMaskStack(
+                M5StateCodec.decodeStack(savedState.getIntArray(STATE_M5_UNDO)),
+                savedState.getStringArray(STATE_M5_UNDO_MASKS)
+            )
+            val redo = restoreMaskStack(
+                M5StateCodec.decodeStack(savedState.getIntArray(STATE_M5_REDO)),
+                savedState.getStringArray(STATE_M5_REDO_MASKS)
+            )
             val undoLabels = savedState.getStringArray(STATE_M5_UNDO_LABELS)
                 ?.toList()
                 .orEmpty()
@@ -3099,7 +3726,11 @@ class MainActivity : Activity() {
                 .orEmpty()
             editingState = EditingState.restored(
                 EditingState.Snapshot(
-                    state = restoredM5,
+                    state = restoredM5.copy(
+                        masking = MaskingStateCodec.decode(
+                            savedState.getString(STATE_M5_EDIT_MASK)
+                        ) ?: restoredM5.masking
+                    ),
                     undo = undo,
                     redo = redo,
                     undoLabels = undoLabels,
@@ -3134,6 +3765,11 @@ class MainActivity : Activity() {
         )
     }
 
+    private fun restoreMaskStack(states: List<EditState>, masks: Array<String>?): List<EditState> =
+        states.mapIndexed { index, state ->
+            state.copy(masking = MaskingStateCodec.decode(masks?.getOrNull(index)) ?: state.masking)
+        }
+
     private fun restoreExportOptions(savedState: Bundle?) {
         if (savedState == null) {
             return
@@ -3144,6 +3780,9 @@ class MainActivity : Activity() {
         selectedSize = ExportSize.entries.getOrNull(
             savedState.getInt(STATE_SIZE, selectedSize.ordinal)
         ) ?: ExportSize.ORIGINAL
+        selectedFormat = ExportFormat.entries.getOrNull(
+            savedState.getInt(STATE_FORMAT, selectedFormat.ordinal)
+        ) ?: ExportFormat.JPEG
     }
 
     private fun restoreEditorCategory(savedState: Bundle?) {
@@ -3206,6 +3845,11 @@ class MainActivity : Activity() {
         ExportQuality.SMALLER_FILE -> R.string.quality_smaller_file
     }
 
+    private fun formatLabel(format: ExportFormat): Int = when (format) {
+        ExportFormat.JPEG -> R.string.format_jpeg
+        ExportFormat.PNG -> R.string.format_png
+    }
+
     private fun sizeLabel(size: ExportSize): Int = when (size) {
         ExportSize.ORIGINAL -> R.string.size_original
         ExportSize.PERCENT_75 -> R.string.size_75
@@ -3221,6 +3865,10 @@ class MainActivity : Activity() {
         CropRatio.FOUR_FIVE -> R.string.crop_ratio_four_five
         CropRatio.NINE_SIXTEEN -> R.string.crop_ratio_nine_sixteen
         CropRatio.SIXTEEN_NINE -> R.string.crop_ratio_sixteen_nine
+        CropRatio.THREE_TWO -> R.string.crop_ratio_three_two
+        CropRatio.TWO_THREE -> R.string.crop_ratio_two_three
+        CropRatio.FOUR_THREE -> R.string.crop_ratio_four_three
+        CropRatio.FIVE_FOUR -> R.string.crop_ratio_five_four
     }
 
 
@@ -3637,6 +4285,11 @@ class MainActivity : Activity() {
         outState.putIntArray(STATE_M5_EDIT_STATE, M5StateCodec.encode(snapshot.state))
         outState.putIntArray(STATE_M5_UNDO, M5StateCodec.encodeStack(snapshot.undo))
         outState.putIntArray(STATE_M5_REDO, M5StateCodec.encodeStack(snapshot.redo))
+        outState.putString(STATE_M5_EDIT_MASK, MaskingStateCodec.encode(snapshot.state.masking))
+        outState.putStringArray(STATE_M5_UNDO_MASKS,
+            snapshot.undo.map { MaskingStateCodec.encode(it.masking) }.toTypedArray())
+        outState.putStringArray(STATE_M5_REDO_MASKS,
+            snapshot.redo.map { MaskingStateCodec.encode(it.masking) }.toTypedArray())
         outState.putStringArray(
             STATE_M5_UNDO_LABELS,
             snapshot.undoLabels.toTypedArray()
@@ -3651,6 +4304,7 @@ class MainActivity : Activity() {
         outState.putIntArray(STATE_REDO, EditStateCodec.encodeStack(snapshot.redo))
         outState.putInt(STATE_QUALITY, selectedQuality.ordinal)
         outState.putInt(STATE_SIZE, selectedSize.ordinal)
+        outState.putInt(STATE_FORMAT, selectedFormat.ordinal)
         outState.putInt(STATE_CATEGORY, selectedCategory.ordinal)
         selectedUri?.let { uri ->
             outState.putString(STATE_SELECTED_URI, uri.toString())
@@ -3762,6 +4416,8 @@ class MainActivity : Activity() {
         }
         backCallback = null
         pendingExportRequest = null
+        activityScope.cancel()
+        selfieMaskSegmenter.close()
         exporter.close()
         loader.close()
         renderer.close()
@@ -3800,11 +4456,15 @@ class MainActivity : Activity() {
         const val STATE_M5_UNDO_LABELS = "m5_undo_labels"
         const val STATE_M5_REDO_LABELS = "m5_redo_labels"
         const val STATE_M5_CURRENT_LABEL = "m5_current_label"
+        const val STATE_M5_EDIT_MASK = "m5_edit_mask"
+        const val STATE_M5_UNDO_MASKS = "m5_undo_masks"
+        const val STATE_M5_REDO_MASKS = "m5_redo_masks"
         const val STATE_EDIT_STATE = "m4_edit_state"
         const val STATE_UNDO = "m4_undo"
         const val STATE_REDO = "m4_redo"
         const val STATE_QUALITY = "m4_quality"
         const val STATE_SIZE = "m4_size"
+        const val STATE_FORMAT = "m6_format"
         const val STATE_CATEGORY = "m5_2_category"
         const val STATE_SELECTED_URI = "m2_selected_uri"
         const val STATE_SELECTED_URI_PERSISTED = "m2_selected_uri_persisted"

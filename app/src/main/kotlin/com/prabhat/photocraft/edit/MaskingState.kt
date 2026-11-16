@@ -1,5 +1,6 @@
 package com.prabhat.photocraft.edit
 
+import java.util.UUID
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -7,8 +8,18 @@ import kotlin.math.sqrt
 enum class MaskType {
     SUBJECT,
     BACKGROUND,
-    BRUSH
+    BRUSH,
+    LINEAR_GRADIENT,
+    RADIAL_GRADIENT,
+    COLOR_RANGE,
+    LUMINANCE_RANGE,
+    SKY,
+    LANDSCAPE,
+    PEOPLE,
+    OBJECT
 }
+
+enum class MaskCombineMode { REPLACE, ADD, SUBTRACT, INTERSECT }
 
 data class LocalMaskAdjustments(
     val adjustments: Adjustments = Adjustments.NEUTRAL,
@@ -22,6 +33,12 @@ data class MaskSelection(
     val height: Int,
     val coverage: ByteArray
 ) {
+    override fun equals(other: Any?): Boolean =
+        other is MaskSelection && width == other.width && height == other.height &&
+            coverage.contentEquals(other.coverage)
+
+    override fun hashCode(): Int = 31 * (31 * width + height) + coverage.contentHashCode()
+
     init {
         require(width > 0 && height > 0) { "Mask dimensions must be positive" }
         require(width.toLong() * height.toLong() == coverage.size.toLong()) {
@@ -48,11 +65,9 @@ data class MaskSelection(
     ): MaskSelection {
         val scaleX = width.toFloat() / sourceWidth.coerceAtLeast(1)
         val scaleY = height.toFloat() / sourceHeight.coerceAtLeast(1)
-
         val mappedX = centerX * scaleX
         val mappedY = centerY * scaleY
         val mappedRadius = radius * maxOf(scaleX, scaleY)
-
         val output = coverage.copyOf()
         val r = mappedRadius.coerceAtLeast(1f)
         val left = (mappedX - r).toInt().coerceAtLeast(0)
@@ -100,11 +115,14 @@ data class MaskComponent(
 data class MaskLayer(
     val type: MaskType,
     val name: String = type.name,
+    val id: String = UUID.randomUUID().toString(),
     val selection: MaskSelection? = null, // base/legacy coverage (preserved)
     val components: List<MaskComponent> = emptyList(),
     val selectedComponentIndex: Int = -1,
     val enabled: Boolean = true,
     val inverted: Boolean = false,
+    val retouchMode: Boolean = false,
+    val combineMode: MaskCombineMode = MaskCombineMode.REPLACE,
     val adjustments: LocalMaskAdjustments = LocalMaskAdjustments()
 ) {
     fun hasCoverage(): Boolean = selection != null || components.isNotEmpty()
@@ -118,7 +136,6 @@ data class MaskLayer(
         for (comp in components) {
             val sel = comp.selection
             if (sel.width != w || sel.height != h) {
-                // fallback: sample nearest
                 for (y in 0 until h) {
                     val sy = (y * sel.height / h).coerceIn(0, sel.height - 1)
                     for (x in 0 until w) {
@@ -180,7 +197,6 @@ data class MaskLayer(
     ): MaskLayer {
         val idx = selectedComponentIndex
         if (idx !in components.indices) {
-            // legacy/no component: paint base selection directly
             require(sourceWidth > 0 && sourceHeight > 0)
             val current = selection
                 ?: MaskSelection(sourceWidth, sourceHeight, ByteArray(sourceWidth * sourceHeight))
@@ -189,7 +205,6 @@ data class MaskLayer(
             )
         }
         val comp = components[idx]
-        // component buffer always accumulates paint as "ink" (erase=false); subtract effect applied at combine time
         val updatedSel = comp.selection.paint(sourceWidth, sourceHeight, x, y, radius, flow, erase = false, feather = feather)
         val list = components.toMutableList()
         list[idx] = comp.copy(selection = updatedSel)
@@ -206,7 +221,6 @@ data class MaskLayer(
         erase: Boolean = false,
         feather: Int = 50
     ): MaskLayer {
-        // legacy path
         require(sourceWidth > 0 && sourceHeight > 0)
         val current = selection
             ?: MaskSelection(sourceWidth, sourceHeight, ByteArray(sourceWidth * sourceHeight))
@@ -217,8 +231,8 @@ data class MaskLayer(
 }
 
 data class MaskingState(
-    val subject: MaskLayer = MaskLayer(MaskType.SUBJECT, "Subject"),
-    val background: MaskLayer = MaskLayer(MaskType.BACKGROUND, "Background"),
+    val subject: MaskLayer = MaskLayer(MaskType.SUBJECT, "Subject", id = "subject"),
+    val background: MaskLayer = MaskLayer(MaskType.BACKGROUND, "Background", id = "background"),
     val brushLayers: List<MaskLayer> = emptyList(),
     val selectedMask: MaskType = MaskType.SUBJECT,
     val selectedBrushIndex: Int = -1,
@@ -226,6 +240,10 @@ data class MaskingState(
     val brushFeather: Float = 50f,
     val brushFlow: Float = 100f
 ) {
+    // compatibility with remote callers
+    val layers: List<MaskLayer> get() = allLayers()
+    val selectedLayerId: String get() = selected().id
+
     fun selected(): MaskLayer = when {
         selectedMask == MaskType.BRUSH && selectedBrushIndex in brushLayers.indices ->
             brushLayers[selectedBrushIndex]
@@ -235,11 +253,41 @@ data class MaskingState(
 
     fun hasSelection(): Boolean = selected().hasCoverage()
 
-    fun isNeutral(): Boolean =
-        subject.selection == null && background.selection == null && brushLayers.isEmpty() &&
-            subject.components.isEmpty() && background.components.isEmpty()
+    fun isNeutral(): Boolean = allLayers().all {
+        it.selection == null && it.components.isEmpty() && it.adjustments == LocalMaskAdjustments()
+    }
 
     fun allLayers(): List<MaskLayer> = listOf(subject, background) + brushLayers
+
+    fun selectLayer(id: String): MaskingState {
+        val index = brushLayers.indexOfFirst { it.id == id }
+        if (index >= 0) return copy(selectedMask = brushLayers[index].type, selectedBrushIndex = index)
+        return when (id) {
+            background.id -> copy(selectedMask = MaskType.BACKGROUND, selectedBrushIndex = -1)
+            subject.id -> copy(selectedMask = MaskType.SUBJECT, selectedBrushIndex = -1)
+            else -> this
+        }
+    }
+
+    fun addLayer(type: MaskType = MaskType.BRUSH, name: String? = null): MaskingState {
+        val label = name ?: "${type.name.lowercase().replaceFirstChar { it.uppercase() }} ${brushLayers.size + 1}"
+        val layers = brushLayers + MaskLayer(type, label)
+        return copy(brushLayers = layers, selectedMask = type, selectedBrushIndex = layers.lastIndex)
+    }
+
+    fun duplicateSelected(): MaskingState {
+        val layer = selected().copy(id = UUID.randomUUID().toString(), name = "${selected().name} Copy")
+        val layers = brushLayers + layer
+        return copy(brushLayers = layers, selectedMask = layer.type, selectedBrushIndex = layers.lastIndex)
+    }
+
+    fun combineSelectedWithPrevious(): MaskingState = this
+
+    fun deleteSelected(): MaskingState = when {
+        selectedMask == MaskType.BRUSH && selectedBrushIndex in brushLayers.indices -> deleteSelectedBrush()
+        selectedMask == MaskType.BACKGROUND -> copy(background = background.copy(selection = null, components = emptyList(), selectedComponentIndex = -1))
+        else -> copy(subject = subject.copy(selection = null, components = emptyList(), selectedComponentIndex = -1))
+    }
 
     fun updateSelected(layer: MaskLayer): MaskingState = when {
         selectedMask == MaskType.BRUSH && selectedBrushIndex in brushLayers.indices ->
@@ -304,5 +352,38 @@ data class MaskingState(
         if (selectedMask != MaskType.BRUSH || selectedBrushIndex !in brushLayers.indices) return this
         val updated = brushLayers.toMutableList().also { it.removeAt(selectedBrushIndex) }
         return copy(brushLayers = updated, selectedMask = MaskType.SUBJECT, selectedBrushIndex = -1)
+    }
+
+    fun transformed(geometry: GeometrySettings): MaskingState {
+        if (geometry.isNeutral()) return this
+        fun transformSelection(source: MaskSelection?): MaskSelection? {
+            source ?: return null
+            val (outW, outH) = geometry.outputDimensions(source.width, source.height)
+            val out = ByteArray(outW * outH)
+            val radians = Math.toRadians(geometry.rotationDegrees.toDouble())
+            val cos = kotlin.math.cos(radians).toFloat()
+            val sin = kotlin.math.sin(radians).toFloat()
+            val cx = (source.width - 1) / 2f
+            val cy = (source.height - 1) / 2f
+            val ox = (outW - 1) / 2f
+            val oy = (outH - 1) / 2f
+            for (y in 0 until source.height) for (x in 0 until source.width) {
+                val fx = (if (geometry.flipHorizontal) source.width - 1 - x else x) - cx
+                val fy = (if (geometry.flipVertical) source.height - 1 - y else y) - cy
+                val tx = (fx * cos - fy * sin + ox).toInt()
+                val ty = (fx * sin + fy * cos + oy).toInt()
+                if (tx in 0 until outW && ty in 0 until outH) out[ty * outW + tx] = source.coverage[y * source.width + x]
+            }
+            return MaskSelection(outW, outH, out)
+        }
+        fun transformLayer(layer: MaskLayer): MaskLayer = layer.copy(
+            selection = transformSelection(layer.selection),
+            components = layer.components.map { it.copy(selection = transformSelection(it.selection)!!) }
+        )
+        return copy(
+            subject = transformLayer(subject),
+            background = transformLayer(background),
+            brushLayers = brushLayers.map(::transformLayer)
+        )
     }
 }

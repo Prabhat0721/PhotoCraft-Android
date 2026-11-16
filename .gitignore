@@ -1,10 +1,12 @@
 .gradle/
+.tools/
 .idea/
 build/
 keystore/
 tools/android.jar
 tmp/
 *.iml
+*.class
 *.apk
 *.jks
 *.keystore

@@ -3,7 +3,7 @@ package com.prabhat.photocraft.export
 object ExportNaming {
     private val INVALID_FILE_CHARS = charArrayOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
 
-    fun suggestedFileName(displayName: String?): String {
+    fun suggestedFileName(displayName: String?, extension: String = ExportSettings.FILE_EXTENSION): String {
         val leaf = displayName
             ?.substringAfterLast('/')
             ?.substringAfterLast('\\')
@@ -32,6 +32,7 @@ object ExportNaming {
             base = ExportSettings.FALLBACK_BASE_NAME
         }
 
-        return "$base.${ExportSettings.FILE_EXTENSION}"
+        val safeExtension = extension.lowercase().filter { it.isLetterOrDigit() }.ifBlank { ExportSettings.FILE_EXTENSION }
+        return "$base.$safeExtension"
     }
 }

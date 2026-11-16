@@ -17,15 +17,20 @@ import com.prabhat.photocraft.edit.ColorGradingSettings
 import com.prabhat.photocraft.edit.Adjustments
 import com.prabhat.photocraft.edit.FilterMath
 import com.prabhat.photocraft.edit.FilterSettings
+import com.prabhat.photocraft.edit.GeometrySettings
 import com.prabhat.photocraft.edit.CropSelection
 import com.prabhat.photocraft.edit.MaskLayer
 import com.prabhat.photocraft.edit.MaskingState
 import com.prabhat.photocraft.edit.PhotoEffectsMath
+import com.prabhat.photocraft.edit.ToneCurves
+import com.prabhat.photocraft.edit.ToneCurvesMath
+import com.prabhat.photocraft.image.BitmapGeometry
 import com.prabhat.photocraft.util.RequestSequence
 import java.io.Closeable
 import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
 
 class JpegExporter(private val resolver: ContentResolver) : Closeable {
     sealed class Result {
@@ -144,10 +149,14 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
             }
 
             reportProgress(requestId, Stage.PREPARING, 0, onProgress)
+            val geometry = request.geometry
+            val (effectiveWidth, effectiveHeight) = geometry.outputDimensions(
+                request.sourceWidth.coerceAtLeast(1), request.sourceHeight.coerceAtLeast(1)
+            )
             val decodePlan = if (request.sourceWidth > 0 && request.sourceHeight > 0) {
                 ExportMemoryPolicy.plan(
-                    sourceWidth = request.sourceWidth,
-                    sourceHeight = request.sourceHeight,
+                    sourceWidth = effectiveWidth,
+                    sourceHeight = effectiveHeight,
                     crop = request.crop,
                     size = request.outputSize
                 ) ?: return Result.Failure(FailureReason.DECODE_FAILED)
@@ -160,10 +169,22 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
             }
             reportProgress(requestId, Stage.DECODING, 5, onProgress)
             decoded = if (decodePlan != null) {
-                decode(sourceUri, decodePlan.decodeWidth, decodePlan.decodeHeight)
+                val ratio = decodePlan.decodeWidth.toFloat() / effectiveWidth
+                decode(
+                    sourceUri,
+                    (request.sourceWidth * ratio).roundToInt().coerceAtLeast(1),
+                    (request.sourceHeight * ratio).roundToInt().coerceAtLeast(1)
+                )
             } else {
                 decode(sourceUri, 0, 0)
             }
+            if (!geometry.isNeutral()) {
+                val untransformed = decoded!!
+                val transformed = BitmapGeometry.transform(untransformed, geometry)
+                if (transformed !== untransformed) untransformed.recycle()
+                decoded = transformed
+            }
+            val exportMasking = request.masking.transformed(geometry)
             if (isCancelled()) {
                 return Result.Failure(FailureReason.CANCELLED)
             }
@@ -217,13 +238,15 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
 
             val bitmap = working
             if (!request.adjustments.isNeutral() || !request.filter.isNeutral() ||
-                !request.colorGrading.isNeutral() || !request.effects.isNeutral()) {
+                !request.colorGrading.isNeutral() || !request.effects.isNeutral() ||
+                !request.curves.isNeutral()) {
                 val completed = applyEditsInTiles(
                     bitmap = bitmap,
                     adjustments = request.adjustments,
                     filter = request.filter,
                     colorGrading = request.colorGrading,
                     effects = request.effects,
+                    curves = request.curves,
                     requestId = requestId,
                     onProgress = onProgress
                 )
@@ -232,8 +255,20 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
                 }
             }
 
-            if (!applyLocalMaskAdjustments(bitmap, request.masking, request.crop)) {
+            if (!applyLocalMaskAdjustments(bitmap, exportMasking, request.crop)) {
                 return Result.Failure(FailureReason.CANCELLED)
+            }
+
+            if (request.effects.backgroundBlur > 0) {
+                val pixels = IntArray(bitmap.width * bitmap.height)
+                bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                PhotoEffectsMath.applyLensBlurInPlace(
+                    pixels, bitmap.width, bitmap.height,
+                    exportMasking.background.selection,
+                    request.effects.backgroundBlur,
+                    request.crop
+                )
+                bitmap.setPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
             }
 
             if (isCancelled()) {
@@ -241,7 +276,7 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
             }
 
             reportProgress(requestId, Stage.WRITING, 95, onProgress)
-            val result = writeJpeg(bitmap, destinationUri, request.quality.jpegQuality)
+            val result = writeImage(working ?: bitmap, destinationUri, request.format, request.quality.jpegQuality)
             if (result is Result.Success) {
                 succeeded = true
             }
@@ -292,6 +327,7 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
         filter: FilterSettings,
         colorGrading: ColorGradingSettings,
         effects: com.prabhat.photocraft.edit.PhotoEffects,
+        curves: ToneCurves,
         requestId: Int,
         onProgress: (Stage, Int) -> Unit
     ): Boolean {
@@ -323,6 +359,7 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
                 fullHeight = bitmap.height
             )
             ColorGradingMath.applyInPlace(buffer, colorGrading, tile.pixelCount)
+            ToneCurvesMath.applyInPlace(buffer, curves)
             bitmap.setPixels(
                 buffer,
                 0,
@@ -345,7 +382,7 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
     ): Boolean {
         val layers = masking.allLayers()
             .filter { it.enabled && it.effectiveSelection() != null &&
-                (!it.adjustments.adjustments.isNeutral() ||
+                (it.retouchMode || !it.adjustments.adjustments.isNeutral() ||
                     !it.adjustments.filter.isNeutral() ||
                     !it.adjustments.effects.isNeutral() ||
                     !it.adjustments.colorGrading.isNeutral()) }
@@ -363,6 +400,21 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
                     pixels, 0, tile.width,
                     tile.left, tile.top, tile.width, tile.height
                 )
+
+                if (layer.retouchMode) {
+                    PhotoEffectsMath.applyHealInPlace(
+                        pixels, tile.width, tile.height, selection, crop,
+                        originX = tile.left,
+                        originY = tile.top,
+                        fullWidth = bitmap.width,
+                        fullHeight = bitmap.height
+                    )
+                    bitmap.setPixels(
+                        pixels, 0, tile.width,
+                        tile.left, tile.top, tile.width, tile.height
+                    )
+                    continue
+                }
 
                 val adjusted = pixels.copyOf()
                 AdjustmentMath.applyInPlace(
@@ -428,7 +480,12 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
         return true
     }
 
-    private fun writeJpeg(bitmap: Bitmap, destinationUri: Uri, quality: Int): Result {
+    private fun writeImage(
+        bitmap: Bitmap,
+        destinationUri: Uri,
+        format: ExportFormat,
+        quality: Int
+    ): Result {
         return try {
             if (isCancelled()) {
                 return Result.Failure(FailureReason.CANCELLED)
@@ -439,8 +496,11 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
                 when (
                     ExportWriteGuard.writeIfActive({ isCancelled() }) {
                         val compressed = bitmap.compress(
-                            Bitmap.CompressFormat.JPEG,
-                            quality,
+                            when (format) {
+                                ExportFormat.JPEG -> Bitmap.CompressFormat.JPEG
+                                ExportFormat.PNG -> Bitmap.CompressFormat.PNG
+                            },
+                            if (format == ExportFormat.PNG) 100 else quality,
                             stream
                         )
                         if (compressed) {
