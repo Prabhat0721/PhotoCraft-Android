@@ -1,0 +1,4 @@
+<resources>
+    <item name="colorGradingWheel" type="id" />
+    <item name="maskColorGradingWheel" type="id" />
+</resources>

@@ -30,12 +30,15 @@ printf 'Isolated test directory: %s\n' "$WORK"
 
 JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropGeometry.kt" \
     "$EDIT_DIR/CropSelection.kt" \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/EditState.kt" \
     "$EDIT_DIR/MaskingState.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/ToneCurves.kt" \
     "$EDIT_DIR/EditingState.kt" \
     "$EDIT_DIR/AdjustmentMath.kt" \
     "$M2_TESTS" \
@@ -52,8 +55,11 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/EditState.kt" \
     "$EDIT_DIR/MaskingState.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/ToneCurves.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/EditingState.kt" \
     "$EDIT_DIR/AdjustmentMath.kt" \
     "$EXPORT_DIR/ExportSettings.kt" \
@@ -77,8 +83,10 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/EditState.kt" \
     "$EDIT_DIR/MaskingState.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/ToneCurves.kt" \
     "$EDIT_DIR/EditStateCodec.kt" \
     "$EDIT_DIR/EditingState.kt" \
     "$EXPORT_DIR/ExportSettings.kt" \
@@ -101,11 +109,15 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/FilterMath.kt" \
     "$EDIT_DIR/EditState.kt" \
     "$EDIT_DIR/MaskingState.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/ToneCurves.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/EditStateCodec.kt" \
     "$EDIT_DIR/EditingState.kt" \
     "$EDIT_DIR/M5StateCodec.kt" \
+    "$EDIT_DIR/MaskingStateCodec.kt" \
     "$EDIT_DIR/CropHandleMath.kt" \
     "$EXPORT_DIR/ExportSettings.kt" \
     "$EXPORT_DIR/ExportOptions.kt" \
@@ -128,6 +140,8 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/MaskingState.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/ToneCurves.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/EditingState.kt" \
     "$EXPORT_DIR/ExportWriteGuard.kt" \
     "$EXPORT_DIR/DestinationCleanup.kt" \
@@ -146,6 +160,8 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/ToneCurves.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/MaskingState.kt" \
     "$EXPORT_DIR/ExportOptions.kt" \
     "$EXPORT_DIR/ExportPlanner.kt" \
@@ -170,6 +186,12 @@ printf 'Running color-grading pixel tests...\n'
 java -Xms32m -Xmx256m -jar "$WORK/color-grading-tests.jar"
 
 JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$ROOT/tests/PhotoEffectsTests.kt" \
     -jvm-target 1.8 \
@@ -181,11 +203,14 @@ java -Xms32m -Xmx256m -jar "$WORK/photo-effects-tests.jar"
 
 JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropGeometry.kt" \
     "$EDIT_DIR/CropSelection.kt" \
     "$EDIT_DIR/Filter.kt" \
     "$EDIT_DIR/MaskingState.kt" \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/ToneCurves.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$EDIT_DIR/EditState.kt" \
     "$EDIT_DIR/EditingState.kt" \
     "$ROOT/tests/PhotoEffectsHistoryTests.kt" \
@@ -202,6 +227,8 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
     "$EDIT_DIR/PhotoEffects.kt" \
     "$EDIT_DIR/ColorGrading.kt" \
     "$EDIT_DIR/MaskingState.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
     "$ROOT/tests/MaskingStateTests.kt" \
     -jvm-target 1.8 \
     -include-runtime \
@@ -209,3 +236,25 @@ JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
 
 printf 'Running masking layer and combine-mode tests...\n'
 java -Xms32m -Xmx256m -jar "$WORK/masking-state-tests.jar"
+
+JAVA_OPTS='-Xms32m -Xmx256m' kotlinc \
+    "$EDIT_DIR/Adjustments.kt" \
+    "$EDIT_DIR/CropSelection.kt" \
+    "$EDIT_DIR/Filter.kt" \
+    "$EDIT_DIR/ColorGrading.kt" \
+    "$EDIT_DIR/PhotoEffects.kt" \
+    "$EDIT_DIR/ToneCurves.kt" \
+    "$EDIT_DIR/GeometrySettings.kt" \
+    "$EDIT_DIR/MaskingState.kt" \
+    "$EDIT_DIR/CropGeometry.kt" \
+    "$EDIT_DIR/EditState.kt" \
+    "$EDIT_DIR/M5StateCodec.kt" \
+    "$EDIT_DIR/MaskingStateCodec.kt" \
+    "$ROOT/app/src/main/kotlin/com/prabhat/photocraft/preset/Preset.kt" \
+    "$ROOT/tests/MaskingStateCodecTests.kt" \
+    -jvm-target 1.8 \
+    -include-runtime \
+    -d "$WORK/masking-state-codec-tests.jar"
+
+printf 'Running mask persistence tests...\n'
+java -Xms32m -Xmx256m -jar "$WORK/masking-state-codec-tests.jar"

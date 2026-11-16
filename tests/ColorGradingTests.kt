@@ -65,6 +65,17 @@ fun main() {
     }
 
     run {
+        val actual = intArrayOf(0xFF202020.toInt(), 0xFF808080.toInt(), 0xFFE0E0E0.toInt())
+        val sourcePixels = actual.copyOf()
+        ColorGradingMath.applyInPlace(
+            actual,
+            ColorGradingSettings(global = ToneGrade(hue = 35, amount = 70))
+        )
+        checkTest(actual.indices.all { actual[it] != sourcePixels[it] }, "Global wheel did not grade every tonal range")
+        checkTest(actual.indices.all { (actual[it] ushr 24) == (sourcePixels[it] ushr 24) }, "Global wheel changed alpha")
+    }
+
+    run {
         val actual = source.copyOf()
         ColorGradingMath.applyInPlace(
             actual,

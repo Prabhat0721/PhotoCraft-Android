@@ -3,6 +3,7 @@ package com.prabhat.photocraft.edit
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 enum class HslColor(val centerHue: Float) {
@@ -77,6 +78,7 @@ data class ColorGradingSettings(
     val shadows: ToneGrade = ToneGrade(),
     val midtones: ToneGrade = ToneGrade(),
     val highlights: ToneGrade = ToneGrade(),
+    val global: ToneGrade = ToneGrade(),
     val balance: Int = 0,
     val blending: Int = DEFAULT_BLENDING
 ) {
@@ -90,6 +92,7 @@ data class ColorGradingSettings(
             shadows.isNeutral() &&
             midtones.isNeutral() &&
             highlights.isNeutral() &&
+            global.isNeutral() &&
             balance == 0
 
     companion object {
@@ -139,34 +142,41 @@ object ColorGradingMath {
 
             lightness = (
                 lightness +
+                    settings.global.luminance / 200f +
                     settings.shadows.luminance / 200f * weights.first +
                     settings.midtones.luminance / 200f * weights.second +
                     settings.highlights.luminance / 200f * weights.third
                 ).coerceIn(0f, 1f)
 
             val adjusted = hslToRgb(hue, saturation, lightness)
-            var r = adjusted[0]
-            var g = adjusted[1]
-            var b = adjusted[2]
+            var r = srgbToLinear(adjusted[0])
+            var g = srgbToLinear(adjusted[1])
+            var b = srgbToLinear(adjusted[2])
 
             fun applyTint(grade: ToneGrade, zoneWeight: Float) {
                 if (grade.amount == 0 || zoneWeight <= 0f) return
-                val tint = hslToRgb(grade.hue.toFloat(), 0.65f, 0.5f)
-                val mix = (grade.amount / 100f * zoneWeight * 0.22f)
-                    .coerceIn(0f, 0.22f)
-                r = (r * (1f - mix) + tint[0] * mix).coerceIn(0f, 1f)
-                g = (g * (1f - mix) + tint[1] * mix).coerceIn(0f, 1f)
-                b = (b * (1f - mix) + tint[2] * mix).coerceIn(0f, 1f)
+                val tintSrgb = hslToRgb(grade.hue.toFloat(), 1f, 0.5f)
+                val tintR = srgbToLinear(tintSrgb[0])
+                val tintG = srgbToLinear(tintSrgb[1])
+                val tintB = srgbToLinear(tintSrgb[2])
+                val tintLuma = linearLuma(tintR, tintG, tintB)
+                val mix = grade.amount / 100f * zoneWeight * 0.4f
+                // Add color-wheel chroma around a neutral-luma axis. This keeps
+                // tonal brightness steadier than blending directly toward a swatch.
+                r += (tintR - tintLuma) * mix
+                g += (tintG - tintLuma) * mix
+                b += (tintB - tintLuma) * mix
             }
 
+            applyTint(settings.global, 1f)
             applyTint(settings.shadows, weights.first)
             applyTint(settings.midtones, weights.second)
             applyTint(settings.highlights, weights.third)
 
             pixels[index] = (alpha shl 24) or
-                (toByte(r) shl 16) or
-                (toByte(g) shl 8) or
-                toByte(b)
+                (toByte(linearToSrgb(r)) shl 16) or
+                (toByte(linearToSrgb(g)) shl 8) or
+                toByte(linearToSrgb(b))
         }
     }
 
@@ -182,10 +192,10 @@ object ColorGradingMath {
         balance: Int,
         blending: Int
     ): Triple<Float, Float, Float> {
-        val shifted = (lightness - balance / 200f).coerceIn(0f, 1f)
+        val shifted = (lightness + balance / 200f).coerceIn(0f, 1f)
         val overlap = (blending / 100f - 0.5f) * 0.30f
-        val shadows = 1f - smoothstep(0.15f, 0.55f - overlap, shifted)
-        val highlights = smoothstep(0.45f + overlap, 0.85f, shifted)
+        val shadows = 1f - smoothstep(0.15f - overlap, 0.55f + overlap, shifted)
+        val highlights = smoothstep(0.45f - overlap, 0.85f + overlap, shifted)
         val midtones = (1f - shadows - highlights).coerceIn(0f, 1f)
         return Triple(shadows, midtones, highlights)
     }
@@ -255,4 +265,16 @@ object ColorGradingMath {
 
     private fun toByte(value: Float): Int =
         (value.coerceIn(0f, 1f) * 255f).roundToInt().coerceIn(0, 255)
+
+    private fun srgbToLinear(value: Float): Float =
+        if (value <= 0.04045f) value / 12.92f else ((value + 0.055f) / 1.055f).pow(2.4f)
+
+    private fun linearToSrgb(value: Float): Float {
+        val channel = value.coerceIn(0f, 1f)
+        return if (channel <= 0.0031308f) channel * 12.92f
+        else 1.055f * channel.pow(1f / 2.4f) - 0.055f
+    }
+
+    private fun linearLuma(r: Float, g: Float, b: Float): Float =
+        0.2126f * r + 0.7152f * g + 0.0722f * b
 }

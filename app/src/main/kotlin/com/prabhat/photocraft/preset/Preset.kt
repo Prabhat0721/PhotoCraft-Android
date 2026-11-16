@@ -2,6 +2,7 @@ package com.prabhat.photocraft.preset
 
 import com.prabhat.photocraft.edit.EditState
 import com.prabhat.photocraft.edit.M5StateCodec
+import com.prabhat.photocraft.edit.MaskingStateCodec
 
 data class Preset(
     val name: String,
@@ -42,7 +43,8 @@ object PresetCodec {
             }
         }
         val stateValues = M5StateCodec.encode(preset.state)
-        return encodedName + SEPARATOR + stateValues.joinToString(",")
+        return encodedName + SEPARATOR + stateValues.joinToString(",") + SEPARATOR +
+            MaskingStateCodec.encode(preset.state.masking)
     }
 
     fun decode(encoded: String?): Preset? {
@@ -54,12 +56,16 @@ object PresetCodec {
             return null
         }
         val name = decodeName(encoded.substring(0, separator)) ?: return null
-        val values = encoded.substring(separator + 1)
+        val maskSeparator = encoded.indexOf(SEPARATOR, separator + 1)
+        val stateEnd = if (maskSeparator < 0) encoded.length else maskSeparator
+        val values = encoded.substring(separator + 1, stateEnd)
             .split(',')
             .map { it.toIntOrNull() ?: return null }
             .toIntArray()
         val state = M5StateCodec.decode(values) ?: return null
-        return Preset(name = name, state = state)
+        val mask = if (maskSeparator < 0) state.masking else
+            MaskingStateCodec.decode(encoded.substring(maskSeparator + 1)) ?: return null
+        return Preset(name = name, state = state.copy(masking = mask))
     }
 
     fun encodeAll(presets: Collection<Preset>): Set<String> =

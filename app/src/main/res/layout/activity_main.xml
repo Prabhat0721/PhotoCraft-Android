@@ -482,21 +482,12 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="12dp"
-                                android:orientation="horizontal">
-
+                                android:orientation="vertical">
                                 <Button
-                                    android:id="@+id/maskSubjectButton"
-                                    android:layout_width="0dp"
+                                    android:id="@+id/maskAutoDetectButton"
+                                    android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/mask_subject" />
-
-                                <Button
-                                    android:id="@+id/maskBackgroundButton"
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/mask_background" />
+                                    android:text="@string/mask_detect_subject_background" />
                             </LinearLayout>
 
                             <LinearLayout
@@ -517,6 +508,13 @@
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
                                     android:text="@string/mask_eraser" />
+
+                                <Button
+                                    android:id="@+id/maskHealButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/mask_heal" />
 
                                 <Button
                                     android:id="@+id/maskInvertButton"
@@ -664,6 +662,46 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="6dp"
                                 android:text="@string/crop_drag_hint" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:orientation="horizontal">
+                                <Button
+                                    android:id="@+id/rotateClockwiseButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/geometry_rotate" />
+                                <Button
+                                    android:id="@+id/flipHorizontalButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/geometry_flip_horizontal" />
+                                <Button
+                                    android:id="@+id/flipVerticalButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/geometry_flip_vertical" />
+                            </LinearLayout>
+
+                            <TextView
+                                style="@style/PhotoCraftFieldLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:text="@string/geometry_straighten" />
+                            <com.prabhat.photocraft.ui.ResettableSeekBar
+                                android:id="@+id/straightenSeekBar"
+                                style="@style/PhotoCraftSeekBar"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:contentDescription="@string/geometry_straighten"
+                                android:max="200"
+                                android:progress="100" />
 
                             <TextView
                                 style="@style/PhotoCraftFieldLabel"
@@ -1127,6 +1165,22 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="18dp"
+                            android:text="@string/export_format_label" />
+
+                        <Spinner
+                            android:id="@+id/formatSpinner"
+                            style="@style/PhotoCraftSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="6dp"
+                            android:contentDescription="@string/export_format_label"
+                            android:spinnerMode="dropdown" />
+
+                        <TextView
+                            style="@style/PhotoCraftFieldLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
                             android:text="@string/quality_label" />
 
                         <Spinner

@@ -5,7 +5,11 @@ import kotlin.math.roundToInt
 object M5StateCodec {
     const val LEGACY_VALUE_COUNT = 18
     const val COLOR_VALUE_COUNT = 53
-    const val VALUE_COUNT = 58
+    const val PRE_CURVE_VALUE_COUNT = 58
+    const val PRE_GEOMETRY_VALUE_COUNT = 81
+    const val PRE_BLUR_VALUE_COUNT = 84
+    const val PRE_GLOBAL_GRADE_VALUE_COUNT = 85
+    const val VALUE_COUNT = 88
     private const val ADJUSTMENT_COUNT = 11
     private const val BASIS_POINT_SCALE = 10000f
 
@@ -36,6 +40,10 @@ object M5StateCodec {
             values[i++] = grade.amount
             values[i++] = grade.luminance
         }
+        val global = state.colorGrading.global
+        values[i++] = global.hue
+        values[i++] = global.amount
+        values[i++] = global.luminance
         values[i++] = state.colorGrading.balance
         values[i++] = state.colorGrading.blending
         val effects = state.effects
@@ -43,14 +51,25 @@ object M5StateCodec {
         values[i++] = effects.texture
         values[i++] = effects.details
         values[i++] = effects.noiseReduction
-        values[i] = effects.vignette
+        values[i++] = effects.vignette
+        values[i++] = effects.sharpeningRadius
+        values[i++] = effects.sharpeningDetail
+        values[i++] = effects.sharpeningMasking
+        state.curves.values().copyInto(values, i)
+        i += 20
+        values[i++] = (state.geometry.rotationDegrees * 10f).toInt()
+        values[i++] = if (state.geometry.flipHorizontal) 1 else 0
+        values[i++] = if (state.geometry.flipVertical) 1 else 0
+        values[i] = effects.backgroundBlur
         return values
     }
 
     fun decode(values: IntArray?): EditState? {
         if (values == null ||
             (values.size != LEGACY_VALUE_COUNT &&
-                values.size != COLOR_VALUE_COUNT && values.size != VALUE_COUNT)
+                values.size != COLOR_VALUE_COUNT && values.size != PRE_CURVE_VALUE_COUNT &&
+                values.size != PRE_GEOMETRY_VALUE_COUNT && values.size != PRE_BLUR_VALUE_COUNT &&
+                values.size != PRE_GLOBAL_GRADE_VALUE_COUNT && values.size != VALUE_COUNT)
         ) return null
 
         return try {
@@ -101,22 +120,32 @@ object M5StateCodec {
                 val shadows = readGrade()
                 val midtones = readGrade()
                 val highlights = readGrade()
+                val global = if (values.size == VALUE_COUNT) readGrade() else ToneGrade()
                 grading = ColorGradingSettings(
                     hsl = hsl,
                     shadows = shadows,
                     midtones = midtones,
                     highlights = highlights,
+                    global = global,
                     balance = values[i++],
                     blending = values[i]
                 )
                 i++
-                if (values.size == VALUE_COUNT) {
+                if (values.size >= PRE_CURVE_VALUE_COUNT) {
                     effects = PhotoEffects(
                         sharpness = values[i++],
                         texture = values[i++],
                         details = values[i++],
                         noiseReduction = values[i++],
-                        vignette = values[i]
+                        vignette = values[i++],
+                        sharpeningRadius = if (values.size >= PRE_GEOMETRY_VALUE_COUNT) values[i++] else 1,
+                        sharpeningDetail = if (values.size >= PRE_GEOMETRY_VALUE_COUNT) values[i++] else 0,
+                        sharpeningMasking = if (values.size >= PRE_GEOMETRY_VALUE_COUNT) values[i++] else 0,
+                        backgroundBlur = when (values.size) {
+                            PRE_GLOBAL_GRADE_VALUE_COUNT -> values[84]
+                            VALUE_COUNT -> values[87]
+                            else -> 0
+                        }
                     )
                 }
             }
@@ -127,7 +156,18 @@ object M5StateCodec {
                 cropRatio = ratio,
                 filter = filterSettings,
                 colorGrading = grading,
-                effects = effects
+                effects = effects,
+                curves = if (values.size >= PRE_GEOMETRY_VALUE_COUNT) {
+                    val curveStart = if (values.size == VALUE_COUNT) PRE_CURVE_VALUE_COUNT + 6
+                    else PRE_CURVE_VALUE_COUNT + 3
+                    val curveEnd = curveStart + 20
+                    ToneCurves.fromValues(values.copyOfRange(curveStart, curveEnd))
+                } else ToneCurves.NEUTRAL,
+                geometry = if (values.size >= PRE_BLUR_VALUE_COUNT) GeometrySettings(
+                    rotationDegrees = values[if (values.size == VALUE_COUNT) 84 else 81] / 10f,
+                    flipHorizontal = values[if (values.size == VALUE_COUNT) 85 else 82] == 1,
+                    flipVertical = values[if (values.size == VALUE_COUNT) 86 else 83] == 1
+                ) else GeometrySettings.NEUTRAL
             )
         } catch (_: IllegalArgumentException) {
             null
@@ -149,6 +189,10 @@ object M5StateCodec {
 
         val recordSize = when {
             values.size % VALUE_COUNT == 0 -> VALUE_COUNT
+            values.size % PRE_GLOBAL_GRADE_VALUE_COUNT == 0 -> PRE_GLOBAL_GRADE_VALUE_COUNT
+            values.size % PRE_BLUR_VALUE_COUNT == 0 -> PRE_BLUR_VALUE_COUNT
+            values.size % PRE_GEOMETRY_VALUE_COUNT == 0 -> PRE_GEOMETRY_VALUE_COUNT
+            values.size % PRE_CURVE_VALUE_COUNT == 0 -> PRE_CURVE_VALUE_COUNT
             values.size % COLOR_VALUE_COUNT == 0 -> COLOR_VALUE_COUNT
             values.size % LEGACY_VALUE_COUNT == 0 -> LEGACY_VALUE_COUNT
             else -> return emptyList()

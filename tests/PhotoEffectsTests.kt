@@ -1,5 +1,6 @@
 import com.prabhat.photocraft.edit.PhotoEffects
 import com.prabhat.photocraft.edit.PhotoEffectsMath
+import com.prabhat.photocraft.edit.MaskSelection
 
 fun checkTest(name: String, passed: Boolean) {
     println("${if (passed) "PASS" else "FAIL"}: $name")
@@ -45,6 +46,28 @@ fun main() {
         details, 3, 3, PhotoEffects(details = 80)
     )
     checkTest("Details changes image pixels", !details.contentEquals(original))
+
+    val blurInput = intArrayOf(
+        0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 0xFF000000.toInt()
+    )
+    val selectiveBlur = blurInput.copyOf()
+    PhotoEffectsMath.applyLensBlurInPlace(
+        selectiveBlur, 3, 1,
+        MaskSelection(3, 1, byteArrayOf(0, 255.toByte(), 0)),
+        amount = 100
+    )
+    checkTest("Background blur softens selected background pixels", selectiveBlur[1] != blurInput[1])
+    checkTest("Background blur leaves unselected subject pixels intact",
+        selectiveBlur[0] == blurInput[0] && selectiveBlur[2] == blurInput[2])
+
+    val healInput = IntArray(12 * 3) { 0xFF101010.toInt() }
+    healInput[1 * 12 + 8] = 0xFFFFFFFF.toInt()
+    val healMask = MaskSelection(12, 3, ByteArray(12 * 3).also { it[1 * 12 + 8] = 255.toByte() })
+    PhotoEffectsMath.applyHealInPlace(healInput, 12, 3, healMask)
+    checkTest("Spot heal replaces a selected blemish from a nearby sample",
+        healInput[1 * 12 + 8] != 0xFFFFFFFF.toInt())
+    checkTest("Spot heal preserves pixels outside the painted selection",
+        healInput.indices.filter { it != 20 }.all { healInput[it] == 0xFF101010.toInt() })
 
     val noise = original.copyOf()
     PhotoEffectsMath.applyInPlace(

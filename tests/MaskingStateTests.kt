@@ -25,6 +25,11 @@ private fun values(selection: MaskSelection?): List<Int> =
     selection?.coverage?.map { it.toInt() and 0xFF }.orEmpty()
 
 fun main() {
+    val samePixelsA = MaskSelection(2, 1, byteArrayOf(12, 34))
+    val samePixelsB = MaskSelection(2, 1, byteArrayOf(12, 34))
+    verify("mask selections compare coverage by pixel value", samePixelsA == samePixelsB)
+    verify("equal mask selections share a hash code", samePixelsA.hashCode() == samePixelsB.hashCode())
+
     val initial = MaskingState()
     verify("default stack has subject and background", initial.layers.size == 2)
     verify("default active layer is subject", initial.selected().type == MaskType.SUBJECT)

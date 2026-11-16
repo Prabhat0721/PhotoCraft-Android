@@ -30,6 +30,12 @@ data class MaskSelection(
     val height: Int,
     val coverage: ByteArray
 ) {
+    override fun equals(other: Any?): Boolean =
+        other is MaskSelection && width == other.width && height == other.height &&
+            coverage.contentEquals(other.coverage)
+
+    override fun hashCode(): Int = 31 * (31 * width + height) + coverage.contentHashCode()
+
     init {
         require(width > 0 && height > 0) { "Mask dimensions must be positive" }
         require(width.toLong() * height.toLong() == coverage.size.toLong()) {
@@ -94,6 +100,7 @@ data class MaskLayer(
     val selection: MaskSelection? = null,
     val enabled: Boolean = true,
     val inverted: Boolean = false,
+    val retouchMode: Boolean = false,
     val combineMode: MaskCombineMode = MaskCombineMode.REPLACE,
     val adjustments: LocalMaskAdjustments = LocalMaskAdjustments()
 ) {
@@ -137,6 +144,45 @@ data class MaskingState(
     val brushFlow: Float = 100f
 ) {
     val layers: List<MaskLayer> get() = listOf(subject, background) + extraLayers
+
+    fun transformed(geometry: GeometrySettings): MaskingState {
+        if (geometry.isNeutral()) return this
+        fun transformSelection(selection: MaskSelection?): MaskSelection? {
+            selection ?: return null
+            val radians = Math.toRadians(geometry.rotationDegrees.toDouble())
+            val cos = kotlin.math.cos(radians)
+            val sin = kotlin.math.sin(radians)
+            val outWidth = kotlin.math.ceil(
+                selection.width * kotlin.math.abs(cos) + selection.height * kotlin.math.abs(sin)
+            ).toInt().coerceAtLeast(1)
+            val outHeight = kotlin.math.ceil(
+                selection.width * kotlin.math.abs(sin) + selection.height * kotlin.math.abs(cos)
+            ).toInt().coerceAtLeast(1)
+            val out = ByteArray(outWidth * outHeight)
+            val cx = outWidth / 2.0
+            val cy = outHeight / 2.0
+            for (y in 0 until outHeight) for (x in 0 until outWidth) {
+                val rx = x + 0.5 - cx
+                val ry = y + 0.5 - cy
+                val rotatedX = cos * rx + sin * ry + selection.width / 2.0
+                val rotatedY = -sin * rx + cos * ry + selection.height / 2.0
+                val sourceX = (if (geometry.flipHorizontal) selection.width - 1 - rotatedX else rotatedX)
+                    .toInt()
+                val sourceY = (if (geometry.flipVertical) selection.height - 1 - rotatedY else rotatedY)
+                    .toInt()
+                if (sourceX in 0 until selection.width && sourceY in 0 until selection.height) {
+                    out[y * outWidth + x] = selection.coverage[sourceY * selection.width + sourceX]
+                }
+            }
+            return MaskSelection(outWidth, outHeight, out)
+        }
+        fun layer(value: MaskLayer) = value.copy(selection = transformSelection(value.selection))
+        return copy(
+            subject = layer(subject),
+            background = layer(background),
+            extraLayers = extraLayers.map(::layer)
+        )
+    }
 
     // Kept as a compatibility accessor for code that still refers to the active mask category.
     val selectedMask: MaskType get() = selected().type
@@ -190,7 +236,7 @@ data class MaskingState(
 
     fun deleteSelected(): MaskingState {
         if (selectedLayerId == subject.id || selectedLayerId == background.id) {
-            val cleared = selected().copy(selection = null, adjustments = LocalMaskAdjustments(), inverted = false)
+            val cleared = selected().copy(selection = null, adjustments = LocalMaskAdjustments(), inverted = false, retouchMode = false)
             return updateSelected(cleared)
         }
         val remaining = extraLayers.filterNot { it.id == selectedLayerId }

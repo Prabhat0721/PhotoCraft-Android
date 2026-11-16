@@ -13,6 +13,9 @@ import com.prabhat.photocraft.edit.FilterMath
 import com.prabhat.photocraft.edit.FilterSettings
 import com.prabhat.photocraft.edit.PhotoEffects
 import com.prabhat.photocraft.edit.PhotoEffectsMath
+import com.prabhat.photocraft.edit.ToneCurves
+import com.prabhat.photocraft.edit.ToneCurvesMath
+import com.prabhat.photocraft.edit.GeometrySettings
 import com.prabhat.photocraft.edit.MaskingState
 import com.prabhat.photocraft.util.RequestSequence
 import java.io.Closeable
@@ -45,6 +48,8 @@ class PreviewRenderer : Closeable {
         filter: FilterSettings,
         effects: PhotoEffects,
         colorGrading: ColorGradingSettings = ColorGradingSettings.NEUTRAL,
+        curves: ToneCurves = ToneCurves.NEUTRAL,
+        geometry: GeometrySettings = GeometrySettings.NEUTRAL,
         masking: MaskingState = MaskingState(),
         callback: (Result) -> Unit
     ) {
@@ -58,7 +63,7 @@ class PreviewRenderer : Closeable {
                 return@post
             }
 
-            val result = render(source, adjustments, filter, effects, colorGrading, masking)
+            val result = render(source, adjustments, filter, effects, colorGrading, curves, geometry, masking)
 
             if (closed.get() || !requests.isCurrent(requestId)) {
                 recycleDiscarded(result, source)
@@ -81,10 +86,12 @@ class PreviewRenderer : Closeable {
         filter: FilterSettings,
         effects: PhotoEffects,
         colorGrading: ColorGradingSettings,
+        curves: ToneCurves,
+        geometry: GeometrySettings,
         masking: MaskingState
     ): Result {
         if (adjustments.isNeutral() && filter.isNeutral() && effects.isNeutral() &&
-            colorGrading.isNeutral() && masking.isNeutral()) {
+            colorGrading.isNeutral() && curves.isNeutral() && geometry.isNeutral() && masking.isNeutral()) {
             return Result.Success(source)
         }
 
@@ -102,11 +109,16 @@ class PreviewRenderer : Closeable {
             FilterMath.applyInPlace(pixels, filter)
             PhotoEffectsMath.applyInPlace(pixels, width, height, effects)
             ColorGradingMath.applyInPlace(pixels, colorGrading)
+            ToneCurvesMath.applyInPlace(pixels, curves)
 
             // Apply each enabled local mask and blend by its coverage.
             for (layer in masking.layers) {
                 if (!layer.enabled) continue
                 val selection = layer.selection ?: continue
+                if (layer.retouchMode) {
+                    PhotoEffectsMath.applyHealInPlace(pixels, width, height, selection)
+                    continue
+                }
                 val local = layer.adjustments
 
                 if (local.adjustments.isNeutral() && local.filter.isNeutral() &&
@@ -149,10 +161,18 @@ class PreviewRenderer : Closeable {
                 }
             }
 
+            PhotoEffectsMath.applyLensBlurInPlace(
+                pixels, width, height, masking.background.selection,
+                effects.backgroundBlur
+            )
+
             output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
                 density = source.density
                 setPixels(pixels, 0, width, 0, 0, width, height)
             }
+            val transformed = BitmapGeometry.transform(output!!, geometry)
+            if (transformed !== output) output!!.recycle()
+            output = transformed
             Result.Success(output)
         } catch (_: OutOfMemoryError) {
             output?.recycle()
