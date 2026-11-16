@@ -18,7 +18,7 @@
             android:textColor="@color/text_primary"
             android:textSize="12sp" />
 
-        <com.prabhat.photocraft.ui.AccessibleSeekBar
+        <com.prabhat.photocraft.ui.ResettableSeekBar
             android:id="@+id/adjustmentSeekBar"
             style="@style/PhotoCraftSeekBar"
             android:layout_width="0dp"

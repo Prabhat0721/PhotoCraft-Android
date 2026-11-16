@@ -632,7 +632,7 @@
                                 android:layout_marginTop="10dp"
                                 android:text="@string/filter_intensity_label" />
 
-                            <SeekBar
+                            <com.prabhat.photocraft.ui.ResettableSeekBar
                                 android:id="@+id/filterIntensitySeekBar"
                                 style="@style/PhotoCraftSeekBar"
                                 android:layout_width="match_parent"
@@ -697,7 +697,7 @@
                                 android:layout_marginTop="12dp"
                                 android:text="@string/crop_width_label" />
 
-                            <SeekBar
+                            <com.prabhat.photocraft.ui.ResettableSeekBar
                                 android:id="@+id/cropWidthSeekBar"
                                 style="@style/PhotoCraftSeekBar"
                                 android:layout_width="match_parent"
@@ -715,7 +715,7 @@
                                 android:layout_marginTop="8dp"
                                 android:text="@string/crop_height_label" />
 
-                            <SeekBar
+                            <com.prabhat.photocraft.ui.ResettableSeekBar
                                 android:id="@+id/cropHeightSeekBar"
                                 style="@style/PhotoCraftSeekBar"
                                 android:layout_width="match_parent"
@@ -732,7 +732,7 @@
                                 android:layout_marginTop="8dp"
                                 android:text="@string/crop_horizontal_label" />
 
-                            <SeekBar
+                            <com.prabhat.photocraft.ui.ResettableSeekBar
                                 android:id="@+id/cropHorizontalSeekBar"
                                 style="@style/PhotoCraftSeekBar"
                                 android:layout_width="match_parent"
@@ -749,7 +749,7 @@
                                 android:layout_marginTop="8dp"
                                 android:text="@string/crop_vertical_label" />
 
-                            <SeekBar
+                            <com.prabhat.photocraft.ui.ResettableSeekBar
                                 android:id="@+id/cropVerticalSeekBar"
                                 style="@style/PhotoCraftSeekBar"
                                 android:layout_width="match_parent"

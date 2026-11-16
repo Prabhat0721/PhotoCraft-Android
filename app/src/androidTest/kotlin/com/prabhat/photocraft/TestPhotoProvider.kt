@@ -21,7 +21,9 @@ class TestPhotoProvider : ContentProvider() {
         selectionArgs: Array<out String>?,
         sortOrder: String?
     ): Cursor {
-        val columns = projection?.toTypedArray()
+        val columns = projection?.let { requested ->
+            Array(requested.size) { index -> requested[index] }
+        }
             ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
         return MatrixCursor(columns).apply {
             addRow(columns.map { column ->

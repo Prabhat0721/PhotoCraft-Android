@@ -74,6 +74,7 @@ import com.prabhat.photocraft.ui.AccessibleImageButton
 import com.prabhat.photocraft.ui.AdaptivePreviewLayout
 import com.prabhat.photocraft.ui.CropOverlayView
 import com.prabhat.photocraft.ui.CropPreviewView
+import com.prabhat.photocraft.ui.ResettableSeekBar
 import com.prabhat.photocraft.util.PhotoRestore
 import kotlin.math.roundToInt
 
@@ -118,7 +119,7 @@ class MainActivity : Activity() {
     private lateinit var filterSpinner: Spinner
     private lateinit var filterSummary: TextView
     private lateinit var filterIntensityLabel: TextView
-    private lateinit var filterIntensitySeekBar: SeekBar
+    private lateinit var filterIntensitySeekBar: ResettableSeekBar
     private lateinit var presetNameInput: EditText
     private lateinit var presetSpinner: Spinner
     private lateinit var savePresetButton: Button
@@ -137,10 +138,10 @@ class MainActivity : Activity() {
     private lateinit var cropSummary: TextView
     private lateinit var cropWidthLabel: TextView
     private lateinit var cropHeightLabel: TextView
-    private lateinit var cropWidthSeekBar: SeekBar
-    private lateinit var cropHeightSeekBar: SeekBar
-    private lateinit var cropHorizontalSeekBar: SeekBar
-    private lateinit var cropVerticalSeekBar: SeekBar
+    private lateinit var cropWidthSeekBar: ResettableSeekBar
+    private lateinit var cropHeightSeekBar: ResettableSeekBar
+    private lateinit var cropHorizontalSeekBar: ResettableSeekBar
+    private lateinit var cropVerticalSeekBar: ResettableSeekBar
     private lateinit var exportButton: Button
     private lateinit var exportProgress: ProgressBar
     private lateinit var exportStatus: TextView
@@ -361,6 +362,7 @@ class MainActivity : Activity() {
                     ) {
                         clearExportStatus()
                         requestPreviewRender()
+                        refreshHistory()
                         syncUiState()
                     }
                 } else {
@@ -373,6 +375,7 @@ class MainActivity : Activity() {
                     ) {
                         clearExportStatus()
                         requestPreviewRender()
+                        refreshHistory()
                         syncUiState()
                     }
                 }
@@ -515,6 +518,10 @@ class MainActivity : Activity() {
     }
 
     private fun setupCropControls() {
+        cropWidthSeekBar.setDefaultProgress(CropGeometry.PROGRESS_MAX)
+        cropHeightSeekBar.setDefaultProgress(CropGeometry.PROGRESS_MAX)
+        cropHorizontalSeekBar.setDefaultProgress(CropGeometry.PROGRESS_MAX / 2)
+        cropVerticalSeekBar.setDefaultProgress(CropGeometry.PROGRESS_MAX / 2)
         val seekListener = object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(
                 seekBar: SeekBar?,
@@ -546,6 +553,18 @@ class MainActivity : Activity() {
         cropHeightSeekBar.setOnSeekBarChangeListener(seekListener)
         cropHorizontalSeekBar.setOnSeekBarChangeListener(seekListener)
         cropVerticalSeekBar.setOnSeekBarChangeListener(seekListener)
+        listOf(
+            cropWidthSeekBar,
+            cropHeightSeekBar,
+            cropHorizontalSeekBar,
+            cropVerticalSeekBar
+        ).forEach { bar ->
+            bar.onResetToDefault = {
+                seekListener.onStartTrackingTouch(bar)
+                bar.resetProgressToDefault()
+                seekListener.onStopTrackingTouch(bar)
+            }
+        }
         applyCropControlsFromState()
     }
 
@@ -697,7 +716,8 @@ class MainActivity : Activity() {
         }
         addAdvancedSlider(
             gradingControls, "grade_blending", getString(R.string.advanced_blending),
-            0, 100, editingState.state.colorGrading.blending
+            0, 100, editingState.state.colorGrading.blending,
+            defaultValue = com.prabhat.photocraft.edit.ColorGradingSettings.DEFAULT_BLENDING
         ) { value ->
             updateColorGrading(editingState.state.colorGrading.copy(blending = value))
         }
@@ -743,6 +763,7 @@ class MainActivity : Activity() {
         minimum: Int,
         maximum: Int,
         initialValue: Int,
+        defaultValue: Int = 0,
         onValueChanged: (Int) -> Unit
     ) {
         val row = LinearLayout(this).apply {
@@ -753,9 +774,10 @@ class MainActivity : Activity() {
             textSize = 13f
             setTextColor(getColor(R.color.text_secondary))
         }
-        val seekBar = SeekBar(this).apply {
+        val seekBar = ResettableSeekBar(this).apply {
             this.max = maximum - minimum
             progress = (initialValue - minimum).coerceIn(0, maximum - minimum)
+            setDefaultProgress(defaultValue - minimum)
             contentDescription = getString(R.string.advanced_slider_description, title)
         }
         advancedSeekBars[key] = seekBar
@@ -780,7 +802,7 @@ class MainActivity : Activity() {
         }
         showValue(initialValue)
 
-        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        val seekListener = object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
                 val value = progress + minimum
                 showValue(value)
@@ -803,7 +825,15 @@ class MainActivity : Activity() {
                     syncUiState()
                 }
             }
-        })
+        }
+        seekBar.setOnSeekBarChangeListener(seekListener)
+        seekBar.onResetToDefault = {
+            if (canEditPhoto()) {
+                seekListener.onStartTrackingTouch(seekBar)
+                seekBar.resetProgressToDefault()
+                seekListener.onStopTrackingTouch(seekBar)
+            }
+        }
     }
 
     private fun replaceHsl(
@@ -932,8 +962,8 @@ class MainActivity : Activity() {
 
         filterIntensitySeekBar.max = FilterSettings.MAX_INTENSITY
         filterIntensitySeekBar.progress = editingState.filter.intensity
-        filterIntensitySeekBar.setOnSeekBarChangeListener(
-            object : SeekBar.OnSeekBarChangeListener {
+        filterIntensitySeekBar.setDefaultProgress(FilterSettings.DEFAULT_INTENSITY)
+        val filterSeekListener = object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(
                     seekBar: SeekBar?,
                     progress: Int,
@@ -971,7 +1001,14 @@ class MainActivity : Activity() {
                     syncUiState()
                 }
             }
-        )
+        filterIntensitySeekBar.setOnSeekBarChangeListener(filterSeekListener)
+        filterIntensitySeekBar.onResetToDefault = {
+            if (canEditPhoto()) {
+                filterSeekListener.onStartTrackingTouch(filterIntensitySeekBar)
+                filterIntensitySeekBar.resetProgressToDefault()
+                filterSeekListener.onStopTrackingTouch(filterIntensitySeekBar)
+            }
+        }
         updateFilterFeedback()
     }
 
@@ -1283,9 +1320,10 @@ class MainActivity : Activity() {
                 textSize = 13f
                 setTextColor(getColor(R.color.text_secondary))
             }
-            val seek = SeekBar(this).apply {
+            val seek = ResettableSeekBar(this).apply {
                 max = 200
                 progress = initial + 100
+                setDefaultProgress(100)
                 contentDescription = getString(
                     R.string.mask_local_adjustment_description,
                     localizedMaskName(initialLayer),
@@ -1302,8 +1340,7 @@ class MainActivity : Activity() {
             }
             showValue(initial)
 
-            seek.setOnSeekBarChangeListener(object :
-                SeekBar.OnSeekBarChangeListener {
+            val localMaskSeekListener = object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(
                     bar: SeekBar?, progress: Int, fromUser: Boolean
                 ) {
@@ -1322,16 +1359,20 @@ class MainActivity : Activity() {
                     )
                     val updated = current.updateSelected(updatedLayer)
 
-                    editingState.updateMasking(
-                        updated,
-                        getString(
-                            R.string.history_local_mask_adjustment,
-                            localizedMaskName(initialLayer),
-                            getString(labelFor(adjustment))
+                    if (editingState.updateMasking(
+                            updated,
+                            getString(
+                                R.string.history_local_mask_adjustment,
+                                localizedMaskName(initialLayer),
+                                getString(labelFor(adjustment))
+                            )
                         )
-                    )
-                    clearExportStatus()
-                    syncUiState()
+                    ) {
+                        clearExportStatus()
+                        requestPreviewRender()
+                        refreshHistory()
+                        syncUiState()
+                    }
                 }
 
                 override fun onStartTrackingTouch(bar: SeekBar?) {
@@ -1339,9 +1380,21 @@ class MainActivity : Activity() {
                 }
 
                 override fun onStopTrackingTouch(bar: SeekBar?) {
-                    if (canEditPhoto()) editingState.endGesture()
+                    if (canEditPhoto()) {
+                        editingState.endGesture()
+                        refreshHistory()
+                        syncUiState()
+                    }
                 }
-            })
+            }
+            seek.setOnSeekBarChangeListener(localMaskSeekListener)
+            seek.onResetToDefault = {
+                if (canEditPhoto()) {
+                    localMaskSeekListener.onStartTrackingTouch(seek)
+                    seek.resetProgressToDefault()
+                    localMaskSeekListener.onStopTrackingTouch(seek)
+                }
+            }
 
             row.addView(label, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1388,6 +1441,7 @@ class MainActivity : Activity() {
             minimum: Int,
             maximum: Int,
             initial: Int,
+            defaultValue: Int,
             write: (com.prabhat.photocraft.edit.MaskingState, Int) ->
                 com.prabhat.photocraft.edit.MaskingState
         ) {
@@ -1395,9 +1449,10 @@ class MainActivity : Activity() {
                 textSize = 13f
                 setTextColor(getColor(R.color.text_secondary))
             }
-            val seek = SeekBar(this).apply {
+            val seek = ResettableSeekBar(this).apply {
                 max = maximum - minimum
                 progress = (initial - minimum).coerceIn(0, max)
+                setDefaultProgress(defaultValue - minimum)
                 contentDescription = title
             }
             fun updateLabel(value: Int) {
@@ -1406,7 +1461,7 @@ class MainActivity : Activity() {
             updateLabel(initial)
             brushControls.addView(label)
             brushControls.addView(seek)
-            seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            val brushSeekListener = object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
                     val value = progress + minimum
                     updateLabel(value)
@@ -1425,19 +1480,30 @@ class MainActivity : Activity() {
                         syncUiState()
                     }
                 }
-            })
+            }
+            seek.setOnSeekBarChangeListener(brushSeekListener)
+            seek.onResetToDefault = {
+                if (canEditPhoto()) {
+                    brushSeekListener.onStartTrackingTouch(seek)
+                    seek.resetProgressToDefault()
+                    brushSeekListener.onStopTrackingTouch(seek)
+                }
+            }
         }
         val currentMasking = editingState.state.masking
         addBrushControl(
-            getString(R.string.mask_brush_size), 5, 200, currentMasking.brushSize.toInt(),
+            getString(R.string.mask_brush_size), 5, 200,
+            currentMasking.brushSize.toInt(), 40,
             { state, value -> state.copy(brushSize = value.toFloat()) }
         )
         addBrushControl(
-            getString(R.string.mask_feather), 0, 100, currentMasking.brushFeather.toInt(),
+            getString(R.string.mask_feather), 0, 100,
+            currentMasking.brushFeather.toInt(), 50,
             { state, value -> state.copy(brushFeather = value.toFloat()) }
         )
         addBrushControl(
-            getString(R.string.mask_flow), 1, 100, currentMasking.brushFlow.toInt(),
+            getString(R.string.mask_flow), 1, 100,
+            currentMasking.brushFlow.toInt(), 100,
             { state, value -> state.copy(brushFlow = value.toFloat()) }
         )
 
@@ -2018,6 +2084,9 @@ class MainActivity : Activity() {
         suppressCategoryEvents = false
 
         val hasPhoto = sourceBitmap != null
+        previewImage.setMaskInteractionEnabled(
+            hasPhoto && selectedCategory == EditorCategory.MASKING && !compareHeld
+        )
         editorToolbar.visibility = if (hasPhoto) View.VISIBLE else View.GONE
         lightPanel.visibility =
             if (selectedCategory == EditorCategory.LIGHT) View.VISIBLE else View.GONE
@@ -2047,12 +2116,7 @@ class MainActivity : Activity() {
         applyFilterControlsFromState()
         applyDisplayedBitmap()
         updateOutputSummary()
-        if (
-            editingState.adjustments != previousState.adjustments ||
-            editingState.filter != previousState.filter
-        ) {
-            requestPreviewRender()
-        }
+        requestPreviewRender()
         refreshHistory()
         syncUiState()
     }
@@ -2495,6 +2559,9 @@ class MainActivity : Activity() {
 
         sourceBitmap = result.bitmap
         adjustedBitmap = null
+        if (resetEdits || previousUri != uri) {
+            previewImage.resetZoom()
+        }
         currentDisplayName = result.displayName
         sourceWidth = result.sourceWidth.takeIf { it > 0 } ?: result.bitmap.width
         sourceHeight = result.sourceHeight.takeIf { it > 0 } ?: result.bitmap.height

@@ -2,9 +2,7 @@ package com.prabhat.photocraft.ui
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.GestureDetector
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
@@ -25,32 +23,10 @@ class AdjustmentRowView @JvmOverloads constructor(
 
     private val labelView: TextView
     private val valueView: TextView
-    private val seekBar: SeekBar
+    private val seekBar: ResettableSeekBar
     private var boundAdjustment: Adjustment? = null
     private var listener: Listener? = null
     private var suppressCallback = false
-    private val resetDetector = GestureDetector(
-        context,
-        object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(event: MotionEvent): Boolean = true
-
-            override fun onDoubleTap(event: MotionEvent): Boolean {
-                if (boundAdjustment == null || !seekBar.isEnabled) {
-                    return false
-                }
-                val current = seekBar.progress + Adjustment.MIN_VALUE
-                if (current == 0) {
-                    return true
-                }
-                listener?.onAdjustmentStarted(this@AdjustmentRowView)
-                setValue(0)
-                listener?.onAdjustmentChanged(this@AdjustmentRowView, 0)
-                listener?.onAdjustmentStopped(this@AdjustmentRowView)
-                return true
-            }
-        }
-    )
-
     val adjustment: Adjustment?
         get() = boundAdjustment
 
@@ -60,6 +36,14 @@ class AdjustmentRowView @JvmOverloads constructor(
         labelView = findViewById(R.id.adjustmentLabel)
         valueView = findViewById(R.id.adjustmentValue)
         seekBar = findViewById(R.id.adjustmentSeekBar)
+        seekBar.setDefaultProgress(-Adjustment.MIN_VALUE)
+        seekBar.onResetToDefault = {
+            if (seekBar.progress != -Adjustment.MIN_VALUE && seekBar.isEnabled) {
+                listener?.onAdjustmentStarted(this@AdjustmentRowView)
+                seekBar.resetProgressToDefault()
+                listener?.onAdjustmentStopped(this@AdjustmentRowView)
+            }
+        }
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
@@ -79,13 +63,6 @@ class AdjustmentRowView @JvmOverloads constructor(
                 listener?.onAdjustmentStopped(this@AdjustmentRowView)
             }
         })
-        seekBar.setOnTouchListener { view, event ->
-            resetDetector.onTouchEvent(event)
-            if (event.actionMasked == MotionEvent.ACTION_UP) {
-                view.performClick()
-            }
-            false
-        }
     }
 
     fun bind(adjustment: Adjustment, label: String, value: Int, listener: Listener) {

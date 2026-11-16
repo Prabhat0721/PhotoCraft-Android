@@ -1,9 +1,11 @@
 package com.prabhat.photocraft.ui
 
 import android.content.Context
+import android.annotation.SuppressLint
 import android.util.AttributeSet
 import android.widget.ImageButton
 
+@SuppressLint("AppCompatCustomView")
 class AccessibleImageButton @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
