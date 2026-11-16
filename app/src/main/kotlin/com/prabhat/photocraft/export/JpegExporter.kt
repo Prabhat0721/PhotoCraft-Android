@@ -343,8 +343,8 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
         masking: MaskingState,
         crop: CropSelection
     ): Boolean {
-        val layers = listOf(masking.subject, masking.background)
-            .filter { it.enabled && it.selection != null &&
+        val layers = masking.allLayers()
+            .filter { it.enabled && it.effectiveSelection() != null &&
                 (!it.adjustments.adjustments.isNeutral() ||
                     !it.adjustments.filter.isNeutral() ||
                     !it.adjustments.effects.isNeutral() ||
@@ -352,7 +352,7 @@ class JpegExporter(private val resolver: ContentResolver) : Closeable {
 
         for (layer in layers) {
             if (isCancelled()) return false
-            val selection = layer.selection ?: continue
+            val selection = layer.effectiveSelection() ?: continue
             val tiles = ExportTiling.plan(bitmap.width, bitmap.height)
 
             for (tile in tiles) {

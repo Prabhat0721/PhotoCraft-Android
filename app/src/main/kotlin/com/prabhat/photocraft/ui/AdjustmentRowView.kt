@@ -29,6 +29,7 @@ class AdjustmentRowView @JvmOverloads constructor(
     private var boundAdjustment: Adjustment? = null
     private var listener: Listener? = null
     private var suppressCallback = false
+    private var suppressTouch = false
     private val resetDetector = GestureDetector(
         context,
         object : GestureDetector.SimpleOnGestureListener() {
@@ -38,13 +39,14 @@ class AdjustmentRowView @JvmOverloads constructor(
                 if (boundAdjustment == null || !seekBar.isEnabled) {
                     return false
                 }
+                suppressTouch = true
                 val current = seekBar.progress + Adjustment.MIN_VALUE
                 if (current == 0) {
                     return true
                 }
                 listener?.onAdjustmentStarted(this@AdjustmentRowView)
-                setValue(0)
                 listener?.onAdjustmentChanged(this@AdjustmentRowView, 0)
+                setValue(0)
                 listener?.onAdjustmentStopped(this@AdjustmentRowView)
                 return true
             }
@@ -80,7 +82,21 @@ class AdjustmentRowView @JvmOverloads constructor(
             }
         })
         seekBar.setOnTouchListener { _, event ->
-            resetDetector.onTouchEvent(event)
+            if (suppressTouch) {
+                if (event.actionMasked == MotionEvent.ACTION_UP ||
+                    event.actionMasked == MotionEvent.ACTION_CANCEL
+                ) {
+                    suppressTouch = false
+                }
+                true
+            } else {
+                resetDetector.onTouchEvent(event)
+                if (suppressTouch) {
+                    true
+                } else {
+                    false
+                }
+            }
         }
     }
 

@@ -104,9 +104,9 @@ class PreviewRenderer : Closeable {
             ColorGradingMath.applyInPlace(pixels, colorGrading)
 
             // Apply each enabled local mask and blend by its coverage.
-            for (layer in listOf(masking.subject, masking.background)) {
+            for (layer in masking.allLayers()) {
                 if (!layer.enabled) continue
-                val selection = layer.selection ?: continue
+                val selection = layer.effectiveSelection() ?: continue
                 val local = layer.adjustments
 
                 if (local.adjustments.isNeutral() && local.filter.isNeutral() &&

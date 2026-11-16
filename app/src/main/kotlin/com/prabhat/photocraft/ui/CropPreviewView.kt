@@ -31,9 +31,17 @@ class CropPreviewView @JvmOverloads constructor(
     private var maskSelection: MaskSelection? = null
     private var overlayBitmap: Bitmap? = null
     private var maskTouchListener: ((Float, Float, Int) -> Boolean)? = null
+    private var mixTargetTouchListener: ((Float, Float, Int) -> Boolean)? = null
+    private var activeTouchOwner = TouchOwner.NONE
+
+    private enum class TouchOwner { NONE, MIX, MASK }
 
     fun setMaskTouchListener(listener: ((Float, Float, Int) -> Boolean)?) {
         maskTouchListener = listener
+    }
+
+    fun setMixTargetTouchListener(listener: ((Float, Float, Int) -> Boolean)?) {
+        mixTargetTouchListener = listener
     }
 
     fun setMaskSelection(selection: MaskSelection?) {
@@ -77,19 +85,16 @@ class CropPreviewView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val listener = maskTouchListener ?: return super.onTouchEvent(event)
-
-        if (event.actionMasked == MotionEvent.ACTION_DOWN &&
-            !destinationRect.contains(event.x, event.y)
-        ) return false
-
-        when (event.actionMasked) {
+        val action = event.actionMasked
+        when (action) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE,
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> Unit
             else -> return super.onTouchEvent(event)
         }
 
-        if (destinationRect.width() <= 0f || destinationRect.height() <= 0f) return false
+        if (destinationRect.width() <= 0f || destinationRect.height() <= 0f || bitmap == null) {
+            return super.onTouchEvent(event)
+        }
 
         val sx = (sourceRect.left +
             (event.x - destinationRect.left) / destinationRect.width() * sourceRect.width())
@@ -98,7 +103,31 @@ class CropPreviewView @JvmOverloads constructor(
             (event.y - destinationRect.top) / destinationRect.height() * sourceRect.height())
             .coerceIn(sourceRect.top.toFloat(), sourceRect.bottom.toFloat() - 1f)
 
-        return listener(sx, sy, event.actionMasked)
+        if (action == MotionEvent.ACTION_DOWN) {
+            activeTouchOwner = TouchOwner.NONE
+            if (!destinationRect.contains(event.x, event.y)) return false
+            val mix = mixTargetTouchListener
+            if (mix != null && mix(event.x, event.y, action)) {
+                activeTouchOwner = TouchOwner.MIX
+                return true
+            }
+            val mask = maskTouchListener
+            if (mask != null && mask(sx, sy, action)) {
+                activeTouchOwner = TouchOwner.MASK
+                return true
+            }
+            return false
+        }
+
+        val handled = when (activeTouchOwner) {
+            TouchOwner.MIX -> mixTargetTouchListener?.invoke(event.x, event.y, action) ?: false
+            TouchOwner.MASK -> maskTouchListener?.invoke(sx, sy, action) ?: false
+            TouchOwner.NONE -> false
+        }
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            activeTouchOwner = TouchOwner.NONE
+        }
+        return handled
     }
 
     override fun onDraw(canvas: Canvas) {

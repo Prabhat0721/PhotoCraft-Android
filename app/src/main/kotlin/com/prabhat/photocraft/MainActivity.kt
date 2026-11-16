@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import android.view.GestureDetector
 import android.view.Menu
 import android.view.MotionEvent
 import android.view.View
@@ -30,6 +31,11 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.ClipDrawable
+import android.view.Gravity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -145,12 +151,70 @@ class MainActivity : Activity() {
     private lateinit var exportCancelButton: Button
     private lateinit var lightControls: LinearLayout
     private lateinit var colorControls: LinearLayout
-    private lateinit var hslControls: LinearLayout
     private lateinit var gradingControls: LinearLayout
     private lateinit var effectsControls: LinearLayout
+    private lateinit var mixEntryButton: View
+    private lateinit var mixOverlay: View
+    private lateinit var mixSheet: View
+    private lateinit var mixTargetButton: ImageButton
+    private lateinit var mixDoneButton: View
+    private lateinit var mixSlider: SeekBar
+    private lateinit var mixSliderLabel: TextView
+    private lateinit var mixSliderValue: TextView
+    private lateinit var mixPropHue: TextView
+    private lateinit var mixPropSaturation: TextView
+    private lateinit var mixPropLuminance: TextView
+    private val mixSwatchButtons = LinkedHashMap<HslColor, View>()
+    private val mixSwatchDots = LinkedHashMap<HslColor, View>()
+    private var selectedMixColor: HslColor = HslColor.RED
+    private var selectedMixProperty: MixProperty = MixProperty.HUE
+    private var mixTargetActive = false
+    private var mixOverlayVisible = false
+    private var suppressMixSliderEvents = false
+    private var mixSliderGestureChanged = false
+    private var mixTargetDragChanged = false
+    private var mixTargetLastX = 0f
+    private var mixTargetLastY = 0f
+    private var mixTargetAccum = 0f
+
+    private enum class MixProperty { HUE, SATURATION, LUMINANCE }
     private val advancedSeekBars = LinkedHashMap<String, SeekBar>()
     private val advancedLabels = LinkedHashMap<String, TextView>()
     private val advancedLabelTitles = LinkedHashMap<String, String>()
+    private val localMaskAdjustmentSliders = LinkedHashMap<String, LocalMaskSlider>()
+    private val selectedMaskAdjustmentSliders = LinkedHashMap<Adjustment, LocalMaskSlider>()
+
+    private data class LocalMaskSlider(
+        val type: com.prabhat.photocraft.edit.MaskType,
+        val adjustment: Adjustment,
+        val seekBar: SeekBar,
+        val label: TextView
+    )
+
+    // Masking flow
+    private lateinit var maskBrushOverlay: View
+    private lateinit var maskCreateMenu: View
+    private lateinit var maskSelectedTitle: TextView
+    private lateinit var maskSelectedAdjustments: LinearLayout
+    private lateinit var maskDoneButton: Button
+    private lateinit var maskStatusTextView: TextView
+    private lateinit var maskAddButton: View
+    private lateinit var maskToolAdd: ImageButton
+    private lateinit var maskToolSubtract: ImageButton
+    private lateinit var maskToolInvert: ImageButton
+    private lateinit var maskToolDelete: ImageButton
+    private lateinit var maskSizeSeek: SeekBar
+    private lateinit var maskFeatherSeek: SeekBar
+    private lateinit var maskFlowSeek: SeekBar
+    private var maskActiveTool = "Add"
+    private var maskNewComponentOnStroke = true
+    private lateinit var maskComponentsList: LinearLayout
+    private lateinit var maskComponentsHeader: View
+    private var maskEditingLayer = false
+    private var maskStrokeActive = false
+    private var maskLastX = 0f
+    private var maskLastY = 0f
+    private var maskHasLast = false
     private lateinit var errorPanel: View
     private lateinit var errorText: TextView
     private lateinit var errorRetryButton: Button
@@ -208,6 +272,7 @@ class MainActivity : Activity() {
         setupMaskingControls()
         setupFilterControls()
         setupAdvancedControls()
+        setupMixControls()
         setupPresetControls()
         setupCropGesture()
         wireControls()
@@ -319,11 +384,45 @@ class MainActivity : Activity() {
         exportStatus = findViewById(R.id.exportStatus)
         exportStatusRow = findViewById(R.id.exportStatusRow)
         exportCancelButton = findViewById(R.id.exportCancelButton)
+        maskBrushOverlay = findViewById(R.id.maskBrushOverlay)
+        maskCreateMenu = findViewById(R.id.maskCreateMenu)
+        maskSelectedTitle = findViewById(R.id.maskSelectedTitle)
+        maskSelectedAdjustments = findViewById(R.id.maskSelectedAdjustments)
+        maskComponentsList = findViewById(R.id.maskComponentsList)
+        maskComponentsHeader = findViewById(R.id.maskComponentsHeader)
+        maskDoneButton = findViewById(R.id.maskDoneButton)
+        maskStatusTextView = findViewById(R.id.maskStatusText)
+        maskAddButton = findViewById(R.id.maskAddButton)
+        maskToolAdd = findViewById(R.id.maskToolAdd)
+        maskToolSubtract = findViewById(R.id.maskToolSubtract)
+        maskToolInvert = findViewById(R.id.maskToolInvert)
+        maskToolDelete = findViewById(R.id.maskToolDelete)
+        maskSizeSeek = findViewById(R.id.maskSizeSeek)
+        maskFeatherSeek = findViewById(R.id.maskFeatherSeek)
+        maskFlowSeek = findViewById(R.id.maskFlowSeek)
         lightControls = findViewById(R.id.lightControls)
         colorControls = findViewById(R.id.colorControls)
-        hslControls = findViewById(R.id.hslControls)
         gradingControls = findViewById(R.id.gradingControls)
         effectsControls = findViewById(R.id.effectsControls)
+        mixEntryButton = findViewById(R.id.mixEntryButton)
+        mixOverlay = findViewById(R.id.mixOverlay)
+        mixSheet = findViewById(R.id.mixSheet)
+        mixTargetButton = findViewById(R.id.mixTargetButton)
+        mixDoneButton = findViewById(R.id.mixDoneButton)
+        mixSlider = findViewById(R.id.mixSlider)
+        mixSliderLabel = findViewById(R.id.mixSliderLabel)
+        mixSliderValue = findViewById(R.id.mixSliderValue)
+        mixPropHue = findViewById(R.id.mixPropHue)
+        mixPropSaturation = findViewById(R.id.mixPropSaturation)
+        mixPropLuminance = findViewById(R.id.mixPropLuminance)
+        bindMixSwatch(HslColor.RED, R.id.mixSwatchRed, R.id.mixSwatchRedDot)
+        bindMixSwatch(HslColor.ORANGE, R.id.mixSwatchOrange, R.id.mixSwatchOrangeDot)
+        bindMixSwatch(HslColor.YELLOW, R.id.mixSwatchYellow, R.id.mixSwatchYellowDot)
+        bindMixSwatch(HslColor.GREEN, R.id.mixSwatchGreen, R.id.mixSwatchGreenDot)
+        bindMixSwatch(HslColor.CYAN, R.id.mixSwatchCyan, R.id.mixSwatchCyanDot)
+        bindMixSwatch(HslColor.BLUE, R.id.mixSwatchBlue, R.id.mixSwatchBlueDot)
+        bindMixSwatch(HslColor.PURPLE, R.id.mixSwatchPurple, R.id.mixSwatchPurpleDot)
+        bindMixSwatch(HslColor.MAGENTA, R.id.mixSwatchMagenta, R.id.mixSwatchMagentaDot)
         errorPanel = findViewById(R.id.errorPanel)
         errorText = findViewById(R.id.errorText)
         errorRetryButton = findViewById(R.id.errorRetryButton)
@@ -545,46 +644,11 @@ class MainActivity : Activity() {
     private enum class GradeRegion { SHADOWS, MIDTONES, HIGHLIGHTS }
 
     private fun setupAdvancedControls() {
-        hslControls.removeAllViews()
         gradingControls.removeAllViews()
         effectsControls.removeAllViews()
         advancedSeekBars.clear()
         advancedLabels.clear()
         advancedLabelTitles.clear()
-
-        for (color in HslColor.entries) {
-            val title = color.name.lowercase().replaceFirstChar { it.uppercase() }
-            addAdvancedSlider(
-                hslControls, "hsl_${color.name}_hue", "$title · Hue",
-                -180, 180, editingState.state.colorGrading.hsl.adjustment(color).hue
-            ) { value ->
-                val state = editingState.state.colorGrading
-                val old = state.hsl.adjustment(color)
-                updateColorGrading(state.copy(
-                    hsl = replaceHsl(state.hsl, color, old.copy(hue = value))
-                ))
-            }
-            addAdvancedSlider(
-                hslControls, "hsl_${color.name}_sat", "$title · Saturation",
-                -100, 100, editingState.state.colorGrading.hsl.adjustment(color).saturation
-            ) { value ->
-                val state = editingState.state.colorGrading
-                val old = state.hsl.adjustment(color)
-                updateColorGrading(state.copy(
-                    hsl = replaceHsl(state.hsl, color, old.copy(saturation = value))
-                ))
-            }
-            addAdvancedSlider(
-                hslControls, "hsl_${color.name}_lum", "$title · Luminance",
-                -100, 100, editingState.state.colorGrading.hsl.adjustment(color).luminance
-            ) { value ->
-                val state = editingState.state.colorGrading
-                val old = state.hsl.adjustment(color)
-                updateColorGrading(state.copy(
-                    hsl = replaceHsl(state.hsl, color, old.copy(luminance = value))
-                ))
-            }
-        }
 
         for (region in GradeRegion.entries) {
             val initial = gradeFor(editingState.state.colorGrading, region)
@@ -620,7 +684,8 @@ class MainActivity : Activity() {
         }
         addAdvancedSlider(
             gradingControls, "grade_blending", "Blending",
-            0, 100, editingState.state.colorGrading.blending
+            0, 100, editingState.state.colorGrading.blending,
+            defaultValue = 50
         ) { value ->
             updateColorGrading(editingState.state.colorGrading.copy(blending = value))
         }
@@ -659,6 +724,39 @@ class MainActivity : Activity() {
         applyAdvancedControlsFromState()
     }
 
+    private fun attachDoubleTapReset(seekBar: SeekBar, onReset: () -> Unit) {
+        var suppressTouch = false
+        val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(event: MotionEvent): Boolean = true
+
+            override fun onDoubleTap(event: MotionEvent): Boolean {
+                if (!seekBar.isEnabled) return false
+                suppressTouch = true
+                seekBar.post {
+                    if (seekBar.isEnabled) onReset()
+                }
+                return true
+            }
+        })
+        seekBar.setOnTouchListener { _, event ->
+            if (suppressTouch) {
+                if (event.actionMasked == MotionEvent.ACTION_UP ||
+                    event.actionMasked == MotionEvent.ACTION_CANCEL
+                ) {
+                    suppressTouch = false
+                }
+                true
+            } else {
+                detector.onTouchEvent(event)
+                if (suppressTouch) {
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     private fun addAdvancedSlider(
         container: LinearLayout,
         key: String,
@@ -666,6 +764,7 @@ class MainActivity : Activity() {
         minimum: Int,
         maximum: Int,
         initialValue: Int,
+        defaultValue: Int = 0,
         onValueChanged: (Int) -> Unit
     ) {
         val row = LinearLayout(this).apply {
@@ -703,6 +802,18 @@ class MainActivity : Activity() {
         }
         showValue(initialValue)
 
+        fun resetToDefault() {
+            if (!canEditPhoto() || !seekBar.isEnabled) return
+            if (currentValue() == defaultValue) return
+            editingState.beginGesture()
+            clearExportStatus()
+            seekBar.progress = (defaultValue - minimum).coerceIn(0, seekBar.max)
+            onValueChanged(defaultValue)
+            editingState.endGesture()
+            refreshHistory()
+            syncUiState()
+        }
+
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
                 val value = progress + minimum
@@ -727,6 +838,7 @@ class MainActivity : Activity() {
                 }
             }
         })
+        attachDoubleTapReset(seekBar) { resetToDefault() }
     }
 
     private fun replaceHsl(
@@ -766,6 +878,7 @@ class MainActivity : Activity() {
             clearExportStatus()
             requestPreviewRender()
             syncUiState()
+            if (mixOverlayVisible) syncMixUi()
         }
     }
 
@@ -778,7 +891,6 @@ class MainActivity : Activity() {
     }
 
     private fun applyAdvancedControlsFromState() {
-        if (!::hslControls.isInitialized) return
         val grading = editingState.state.colorGrading
         val effects = editingState.state.effects
 
@@ -789,12 +901,6 @@ class MainActivity : Activity() {
             advancedLabels[key]?.text = "${advancedLabelTitles[key] ?: key}: $value"
         }
 
-        for (color in HslColor.entries) {
-            val adjustment = grading.hsl.adjustment(color)
-            setValue("hsl_${color.name}_hue", adjustment.hue, -180)
-            setValue("hsl_${color.name}_sat", adjustment.saturation, -100)
-            setValue("hsl_${color.name}_lum", adjustment.luminance, -100)
-        }
         for (region in GradeRegion.entries) {
             val grade = gradeFor(grading, region)
             setValue("grade_${region.name}_hue", grade.hue, -180)
@@ -1215,10 +1321,50 @@ class MainActivity : Activity() {
             }
 
             fun showValue(value: Int) {
-                label.text = "${adjustment.name.lowercase()
-                    .replaceFirstChar { it.uppercase() }}: $value"
+                label.text = localMaskAdjustmentLabel(adjustment, value)
             }
             showValue(initial)
+
+            fun applyValue(value: Int) {
+                val current = editingState.state.masking
+                val layer = if (type ==
+                    com.prabhat.photocraft.edit.MaskType.SUBJECT
+                ) current.subject else current.background
+
+                val updatedLayer = layer.copy(
+                    adjustments = layer.adjustments.copy(
+                        adjustments = layer.adjustments.adjustments
+                            .with(adjustment, value)
+                    )
+                )
+                val updated = if (type ==
+                    com.prabhat.photocraft.edit.MaskType.SUBJECT
+                ) current.copy(subject = updatedLayer)
+                else current.copy(background = updatedLayer)
+
+                if (editingState.updateMasking(
+                    updated, "Local ${type.name} ${adjustment.name}"
+                )) {
+                    clearExportStatus()
+                    requestPreviewRender()
+                    syncUiState()
+                }
+            }
+
+            fun resetToDefault() {
+                if (!canEditPhoto() || !seek.isEnabled) return
+                if (seek.progress - 100 == 0) return
+                editingState.beginGesture()
+                clearExportStatus()
+                seek.progress = 100
+                applyValue(0)
+                editingState.endGesture()
+                refreshHistory()
+                syncUiState()
+            }
+
+            localMaskAdjustmentSliders["${type.name}_${adjustment.name}"] =
+                LocalMaskSlider(type, adjustment, seek, label)
 
             seek.setOnSeekBarChangeListener(object :
                 SeekBar.OnSeekBarChangeListener {
@@ -1228,28 +1374,7 @@ class MainActivity : Activity() {
                     val value = progress - 100
                     showValue(value)
                     if (!fromUser || !canEditPhoto()) return
-
-                    val current = editingState.state.masking
-                    val layer = if (type ==
-                        com.prabhat.photocraft.edit.MaskType.SUBJECT
-                    ) current.subject else current.background
-
-                    val updatedLayer = layer.copy(
-                        adjustments = layer.adjustments.copy(
-                            adjustments = layer.adjustments.adjustments
-                                .with(adjustment, value)
-                        )
-                    )
-                    val updated = if (type ==
-                        com.prabhat.photocraft.edit.MaskType.SUBJECT
-                    ) current.copy(subject = updatedLayer)
-                    else current.copy(background = updatedLayer)
-
-                    editingState.updateMasking(
-                        updated, "Local ${type.name} ${adjustment.name}"
-                    )
-                    clearExportStatus()
-                    syncUiState()
+                    applyValue(value)
                 }
 
                 override fun onStartTrackingTouch(bar: SeekBar?) {
@@ -1260,6 +1385,7 @@ class MainActivity : Activity() {
                     if (canEditPhoto()) editingState.endGesture()
                 }
             })
+            attachDoubleTapReset(seek) { resetToDefault() }
 
             row.addView(label, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1289,13 +1415,11 @@ class MainActivity : Activity() {
     }
 
     private fun setupMaskingControls() {
-        val subjectButton = findViewById<Button>(R.id.maskSubjectButton)
-        val backgroundButton = findViewById<Button>(R.id.maskBackgroundButton)
-        val brushButton = findViewById<Button>(R.id.maskBrushButton)
-        val eraserButton = findViewById<Button>(R.id.maskEraserButton)
-        val invertButton = findViewById<Button>(R.id.maskInvertButton)
-        val statusText = findViewById<TextView>(R.id.maskStatusText)
-        val brushControls = findViewById<LinearLayout>(R.id.maskBrushControls)
+        localMaskAdjustmentSliders.clear()
+        selectedMaskAdjustmentSliders.clear()
+        maskSelectedAdjustments.removeAllViews()
+        buildSelectedMaskAdjustmentControls()
+        // keep legacy hidden containers empty-safe; selected-mask controls used instead
         setupLocalMaskAdjustmentControls(
             findViewById(R.id.maskSubjectAdjustments),
             com.prabhat.photocraft.edit.MaskType.SUBJECT
@@ -1305,225 +1429,409 @@ class MainActivity : Activity() {
             com.prabhat.photocraft.edit.MaskType.BACKGROUND
         )
 
-        brushControls.removeAllViews()
-        fun addBrushControl(
-            title: String,
-            minimum: Int,
-            maximum: Int,
-            initial: Int,
-            write: (com.prabhat.photocraft.edit.MaskingState, Int) ->
-                com.prabhat.photocraft.edit.MaskingState
-        ) {
-            val label = TextView(this).apply {
-                textSize = 13f
-                setTextColor(getColor(R.color.text_secondary))
-            }
-            val seek = SeekBar(this).apply {
-                max = maximum - minimum
-                progress = (initial - minimum).coerceIn(0, max)
-                contentDescription = title
-            }
-            fun updateLabel(value: Int) {
-                label.text = "$title: $value"
-            }
-            updateLabel(initial)
-            brushControls.addView(label)
-            brushControls.addView(seek)
-            seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val value = progress + minimum
-                    updateLabel(value)
-                    if (fromUser && canEditPhoto()) {
-                        val masking = editingState.state.masking
-                        editingState.updateMasking(write(masking, value), title)
-                    }
-                }
-                override fun onStartTrackingTouch(bar: SeekBar?) {
-                    if (canEditPhoto()) editingState.beginGesture()
-                }
-                override fun onStopTrackingTouch(bar: SeekBar?) {
-                    if (canEditPhoto()) {
-                        editingState.endGesture()
-                        refreshHistory()
-                        syncUiState()
-                    }
-                }
-            })
-        }
-        val currentMasking = editingState.state.masking
-        addBrushControl(
-            "Brush Size", 5, 200, currentMasking.brushSize.toInt(),
-            { state, value -> state.copy(brushSize = value.toFloat()) }
-        )
-        addBrushControl(
-            "Feather", 0, 100, currentMasking.brushFeather.toInt(),
-            { state, value -> state.copy(brushFeather = value.toFloat()) }
-        )
-        addBrushControl(
-            "Flow", 1, 100, currentMasking.brushFlow.toInt(),
-            { state, value -> state.copy(brushFlow = value.toFloat()) }
-        )
-
-        var activeTool = "Brush"
-        val preview = previewImage
-
-        fun refreshMaskStatus() {
-            val masking = editingState.state.masking
-            val layer = masking.selected()
-            statusText.text = "Mask: ${masking.selectedMask} • Tool: $activeTool • " +
-                if (layer.selection == null) "No selection yet" else "Selection ready"
-            preview.setMaskSelection(
-                if (selectedCategory == EditorCategory.MASKING && !compareHeld) {
-                    layer.selection
-                } else null
-            )
+        fun beginMaskParamGesture() { if (canEditPhoto()) editingState.beginGesture() }
+        fun endMaskParamGesture(label: String) {
+            if (!canEditPhoto()) return
+            editingState.endGesture()
+            refreshHistory(); syncUiState(); refreshMaskUi()
         }
 
-        fun autoSelectMask(type: com.prabhat.photocraft.edit.MaskType) {
-            val bitmap = sourceBitmap
-            if (bitmap == null) {
-                statusText.text = "Open a photo first"
-                return
+        // size/feather/flow write masking state
+        maskSizeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser || !canEditPhoto()) return
+                val value = (progress + 5).toFloat()
+                editingState.updateMasking(editingState.state.masking.copy(brushSize = value), "Brush Size")
             }
-
-            val current = editingState.state.masking
-            val existingSubject = current.subject.selection
-
-            fun applySubjectMask(subject: com.prabhat.photocraft.edit.MaskSelection) {
-                val inverse = ByteArray(subject.coverage.size) { i ->
-                    (255 - (subject.coverage[i].toInt() and 0xFF)).toByte()
-                }
-                val background = com.prabhat.photocraft.edit.MaskSelection(
-                    subject.width, subject.height, inverse
-                )
-                val updated = current.copy(
-                    subject = current.subject.copy(selection = subject, inverted = false),
-                    background = current.background.copy(selection = background, inverted = false),
-                    selectedMask = type
-                )
-                editingState.updateMasking(updated, "Auto Select $type")
-                refreshMaskStatus()
-                syncUiState()
+            override fun onStartTrackingTouch(bar: SeekBar?) { beginMaskParamGesture() }
+            override fun onStopTrackingTouch(bar: SeekBar?) { endMaskParamGesture("Brush Size") }
+        })
+        maskFeatherSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser || !canEditPhoto()) return
+                editingState.updateMasking(editingState.state.masking.copy(brushFeather = progress.toFloat()), "Brush Feather")
             }
-
-            if (type == com.prabhat.photocraft.edit.MaskType.BACKGROUND &&
-                existingSubject != null
-            ) {
-                applySubjectMask(existingSubject)
-                return
+            override fun onStartTrackingTouch(bar: SeekBar?) { beginMaskParamGesture() }
+            override fun onStopTrackingTouch(bar: SeekBar?) { endMaskParamGesture("Brush Feather") }
+        })
+        maskFlowSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser || !canEditPhoto()) return
+                val value = (progress + 1).toFloat()
+                editingState.updateMasking(editingState.state.masking.copy(brushFlow = value), "Brush Flow")
             }
+            override fun onStartTrackingTouch(bar: SeekBar?) { beginMaskParamGesture() }
+            override fun onStopTrackingTouch(bar: SeekBar?) { endMaskParamGesture("Brush Flow") }
+        })
 
-            statusText.text = "Detecting subject..."
-            CoroutineScope(Dispatchers.Main).launch {
-                try {
-                    val detected = selfieMaskSegmenter.createMask(bitmap)
-                    val inverse = ByteArray(detected.coverage.size) { i ->
-                        (255 - (detected.coverage[i].toInt() and 0xFF)).toByte()
-                    }
-                    val background = com.prabhat.photocraft.edit.MaskSelection(
-                        detected.width, detected.height, inverse
-                    )
-                    val latest = editingState.state.masking.copy(
-                        subject = editingState.state.masking.subject.copy(
-                            selection = detected, inverted = false
-                        ),
-                        background = editingState.state.masking.background.copy(
-                            selection = background, inverted = false
-                        ),
-                        selectedMask = type
-                    )
-                    editingState.updateMasking(latest, "Auto Select $type")
-                    refreshMaskStatus()
-                    syncUiState()
-                } catch (error: Exception) {
-                    statusText.text = "Subject detection failed: ${error.message ?: "try again"}"
-                }
-            }
+        maskAddButton.setOnClickListener {
+            if (!canEditPhoto()) return@setOnClickListener
+            maskCreateMenu.visibility = if (maskCreateMenu.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
-        subjectButton.setOnClickListener {
+        findViewById<Button>(R.id.maskSubjectButton).setOnClickListener {
+            maskCreateMenu.visibility = View.GONE
             autoSelectMask(com.prabhat.photocraft.edit.MaskType.SUBJECT)
         }
-
-        backgroundButton.setOnClickListener {
+        findViewById<Button>(R.id.maskBackgroundButton).setOnClickListener {
+            maskCreateMenu.visibility = View.GONE
             autoSelectMask(com.prabhat.photocraft.edit.MaskType.BACKGROUND)
         }
-
-        brushButton.setOnClickListener {
-            activeTool = "Brush"
-            refreshMaskStatus()
+        findViewById<Button>(R.id.maskBrushButton).setOnClickListener {
+            if (!canEditPhoto()) return@setOnClickListener
+            maskCreateMenu.visibility = View.GONE
+            val updated = editingState.state.masking.addBrushLayer()
+            editingState.updateMasking(updated, "Add ${updated.selected().name}")
+            maskActiveTool = "Add"
+            enterMaskEditMode()
+            refreshMaskUi(); syncUiState(); refreshHistory()
         }
 
-        eraserButton.setOnClickListener {
-            activeTool = "Eraser"
-            refreshMaskStatus()
+        maskToolAdd.setOnClickListener {
+            maskActiveTool = "Add"
+            maskNewComponentOnStroke = true
+            refreshMaskUi()
         }
-
-        invertButton.setOnClickListener {
+        maskToolSubtract.setOnClickListener {
+            maskActiveTool = "Subtract"
+            maskNewComponentOnStroke = true
+            refreshMaskUi()
+        }
+        maskToolInvert.setOnClickListener {
+            if (!canEditPhoto()) return@setOnClickListener
             val masking = editingState.state.masking
             val layer = masking.selected()
             val updatedLayer = layer.copy(inverted = !layer.inverted)
-            val updatedMasking = when (masking.selectedMask) {
-                com.prabhat.photocraft.edit.MaskType.SUBJECT ->
-                    masking.copy(subject = updatedLayer)
-                com.prabhat.photocraft.edit.MaskType.BACKGROUND ->
-                    masking.copy(background = updatedLayer)
-            }
-            editingState.updateMasking(updatedMasking, "Invert Mask")
-            refreshMaskStatus()
-            syncUiState()
+            editingState.updateMasking(masking.updateSelected(updatedLayer), "Invert ${layer.name}")
+            refreshMaskUi(); syncUiState(); refreshHistory(); requestPreviewRender()
         }
-
-        preview.setMaskTouchListener { x, y, action ->
-            if (selectedCategory != EditorCategory.MASKING || compareHeld || sourceBitmap == null) {
-                false
+        maskToolDelete.setOnClickListener {
+            if (!canEditPhoto()) return@setOnClickListener
+            val masking = editingState.state.masking
+            val layer = masking.selected()
+            val updated = if (layer.selectedComponentIndex in layer.components.indices) {
+                editingState.updateMasking(masking.updateSelected(layer.deleteSelectedComponent()), "Delete Component")
+                return@setOnClickListener refreshMaskUi().also { syncUiState(); refreshHistory(); requestPreviewRender() }
+            } else if (masking.selectedMask == com.prabhat.photocraft.edit.MaskType.BRUSH && layer.components.isEmpty() && layer.selection == null) {
+                masking.deleteSelectedBrush()
             } else {
-                when (action) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        editingState.beginGesture()
-                        val masking = editingState.state.masking
-                        editingState.updateMasking(
-                            masking.paintSelected(
-                                sourceBitmap!!.width,
-                                sourceBitmap!!.height,
-                                x, y, masking.brushSize, masking.brushFlow.toInt(),
-                                erase = activeTool == "Eraser",
-                                feather = masking.brushFeather.toInt()
-                            ),
-                            "Paint Mask"
-                        )
-                        refreshMaskStatus()
-                    }
-                    android.view.MotionEvent.ACTION_MOVE -> {
-                        val masking = editingState.state.masking
-                        editingState.updateMasking(
-                            masking.paintSelected(
-                                sourceBitmap!!.width,
-                                sourceBitmap!!.height,
-                                x, y, masking.brushSize, masking.brushFlow.toInt(),
-                                erase = activeTool == "Eraser",
-                                feather = masking.brushFeather.toInt()
-                            ),
-                            "Paint Mask"
-                        )
-                        refreshMaskStatus()
-                    }
-                    android.view.MotionEvent.ACTION_UP -> {
-                        editingState.endGesture()
-                        refreshMaskStatus()
-                        syncUiState()
-                    }
-                    android.view.MotionEvent.ACTION_CANCEL -> {
-                        editingState.cancelGesture()
-                        refreshMaskStatus()
-                        syncUiState()
-                    }
-                }
-                true
+                masking.updateSelected(layer.copy(selection = null, components = emptyList(), selectedComponentIndex = -1, inverted = false))
             }
+            editingState.updateMasking(updated, "Delete Mask")
+            exitMaskEditMode(keepEdits = true)
+            refreshMaskUi(); syncUiState(); refreshHistory(); requestPreviewRender()
+        }
+        maskDoneButton.setOnClickListener { exitMaskEditMode(keepEdits = true) }
+
+        previewImage.setMaskTouchListener { x, y, action ->
+            handleMaskTouch(x, y, action)
         }
 
-        refreshMaskStatus()
+        refreshMaskUi()
+    }
+
+    private fun buildSelectedMaskAdjustmentControls() {
+        selectedMaskAdjustmentSliders.clear()
+        maskSelectedAdjustments.removeAllViews()
+        fun addGroupTitle(title: String) {
+            maskSelectedAdjustments.addView(TextView(this).apply {
+                text = title
+                textSize = 12f
+                letterSpacing = 0.08f
+                setTextColor(getColor(R.color.text_secondary))
+                setPadding(0, dp(10), 0, dp(2))
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        fun addAdjustment(adjustment: Adjustment) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(3), 0, dp(3)) }
+            val label = TextView(this).apply { textSize = 13f; setTextColor(getColor(R.color.text_secondary)) }
+            val seek = SeekBar(this).apply { max = 200; progress = 100; contentDescription = adjustment.name }
+            fun valueOf() = seek.progress - 100
+            fun show(v: Int) { label.text = localMaskAdjustmentLabel(adjustment, v) }
+            show(0)
+            fun applyValue(value: Int, record: Boolean) {
+                val masking = editingState.state.masking
+                val layer = masking.selected()
+                val updatedLayer = layer.copy(
+                    adjustments = layer.adjustments.copy(
+                        adjustments = layer.adjustments.adjustments.with(adjustment, value)
+                    )
+                )
+                editingState.updateMasking(masking.updateSelected(updatedLayer), "Local ${layer.name} ${adjustment.name}")
+                clearExportStatus(); requestPreviewRender(); syncUiState()
+            }
+            fun reset() {
+                if (!canEditPhoto() || !seek.isEnabled) return
+                if (valueOf() == 0) return
+                editingState.beginGesture(); clearExportStatus()
+                seek.progress = 100; applyValue(0, true)
+                editingState.endGesture(); refreshHistory(); syncUiState(); refreshMaskUi()
+            }
+            selectedMaskAdjustmentSliders[adjustment] = LocalMaskSlider(
+                com.prabhat.photocraft.edit.MaskType.BRUSH, adjustment, seek, label
+            )
+            seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val v = progress - 100; show(v)
+                    if (!fromUser || !canEditPhoto() || !maskEditingLayer) return
+                    applyValue(v, false)
+                }
+                override fun onStartTrackingTouch(bar: SeekBar?) { if (canEditPhoto()) editingState.beginGesture() }
+                override fun onStopTrackingTouch(bar: SeekBar?) { if (canEditPhoto()) { editingState.endGesture(); refreshHistory(); syncUiState(); refreshMaskUi() } }
+            })
+            attachDoubleTapReset(seek) { reset() }
+            row.addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            row.addView(seek, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            maskSelectedAdjustments.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        addGroupTitle("LIGHT")
+        Adjustment.values().filter { it.group == AdjustmentGroup.LIGHT }.forEach { addAdjustment(it) }
+        addGroupTitle("COLOR")
+        Adjustment.values().filter { it.group == AdjustmentGroup.COLOR }.forEach { addAdjustment(it) }
+    }
+
+    private fun enterMaskEditMode() {
+        maskEditingLayer = true
+        maskCreateMenu.visibility = View.GONE
+        refreshMaskUi()
+        syncUiState()
+    }
+
+    private fun exitMaskEditMode(keepEdits: Boolean) {
+        maskEditingLayer = false
+        maskStrokeActive = false
+        maskHasLast = false
+        maskCreateMenu.visibility = View.GONE
+        refreshMaskUi()
+        syncUiState()
+    }
+
+    private fun refreshMaskUi() {
+        if (!::maskBrushOverlay.isInitialized) return
+        val hasPhoto = sourceBitmap != null
+        val inMask = selectedCategory == EditorCategory.MASKING && hasPhoto
+        val editing = inMask && maskEditingLayer && !compareHeld
+        maskBrushOverlay.visibility = if (editing) View.VISIBLE else View.GONE
+        maskSelectedTitle.visibility = if (editing) View.VISIBLE else View.GONE
+        maskSelectedAdjustments.visibility = if (editing) View.VISIBLE else View.GONE
+        maskDoneButton.visibility = if (editing) View.VISIBLE else View.GONE
+        if (inMask) {
+            val masking = editingState.state.masking
+            val layer = masking.selected()
+            val name = layer.name
+            val mode = if (maskActiveTool == "Subtract") "Subtract from" else "Add to"
+            maskStatusTextView.text = if (editing) "$name • $mode" else "Tap + to create a mask."
+            maskSelectedTitle.text = name.uppercase()
+            val addActive = maskActiveTool != "Subtract"
+            maskToolAdd.alpha = if (addActive) 1f else 0.55f
+            maskToolAdd.setColorFilter(getColor(if (addActive) R.color.accent else R.color.text_primary))
+            maskToolSubtract.alpha = if (!addActive) 1f else 0.55f
+            maskToolSubtract.setColorFilter(getColor(if (!addActive) R.color.accent else R.color.text_primary))
+            val sizeProg = (masking.brushSize.toInt() - 5).coerceIn(0, maskSizeSeek.max)
+            if (maskSizeSeek.progress != sizeProg) maskSizeSeek.progress = sizeProg
+            val featherProg = masking.brushFeather.toInt().coerceIn(0, maskFeatherSeek.max)
+            if (maskFeatherSeek.progress != featherProg) maskFeatherSeek.progress = featherProg
+            val flowProg = (masking.brushFlow.toInt() - 1).coerceIn(0, maskFlowSeek.max)
+            if (maskFlowSeek.progress != flowProg) maskFlowSeek.progress = flowProg
+            previewImage.setMaskSelection(if (!compareHeld) layer.effectiveSelection() else null)
+            rebuildMaskComponentsUi(layer)
+            if (editing && selectedMaskAdjustmentSliders.isNotEmpty()) {
+                for ((adj, control) in selectedMaskAdjustmentSliders) {
+                    val v = layer.adjustments.adjustments.value(adj)
+                    val p = (v + 100).coerceIn(0, control.seekBar.max)
+                    if (control.seekBar.progress != p) control.seekBar.progress = p
+                    control.label.text = localMaskAdjustmentLabel(adj, v)
+                }
+            }
+        } else {
+            maskStatusTextView.text = "Tap + to create a mask."
+            previewImage.setMaskSelection(null)
+        }
+        maskAddButton.isEnabled = hasPhoto && !exportGate.isExporting
+    }
+
+    private fun rebuildMaskComponentsUi(layer: com.prabhat.photocraft.edit.MaskLayer) {
+        if (!::maskComponentsList.isInitialized) return
+        val show = maskEditingLayer && selectedCategory == EditorCategory.MASKING && !compareHeld
+        maskComponentsHeader.visibility = if (show) View.VISIBLE else View.GONE
+        maskComponentsList.visibility = if (show) View.VISIBLE else View.GONE
+        maskComponentsList.removeAllViews()
+        if (!show) return
+        if (layer.components.isEmpty()) {
+            val t = TextView(this).apply {
+                text = "No components yet. Use Add/Subtract to paint."
+                setTextColor(getColor(R.color.text_secondary)); textSize = 12f
+                setPadding(0, dp(4), 0, dp(4))
+            }
+            maskComponentsList.addView(t)
+            return
+        }
+        layer.components.forEachIndexed { index, comp ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, dp(4), 0, dp(4))
+            }
+            val selected = index == layer.selectedComponentIndex && !maskNewComponentOnStroke
+            val label = TextView(this).apply {
+                text = if (comp.add) "+ ${comp.name}" else "- ${comp.name}"
+                setTextColor(getColor(if (selected) R.color.accent else R.color.text_primary))
+                textSize = 13f
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setOnClickListener {
+                    if (!canEditPhoto()) return@setOnClickListener
+                    val m = editingState.state.masking
+                    editingState.updateMasking(m.updateSelected(m.selected().selectComponent(index)), "Select Component")
+                    maskNewComponentOnStroke = false
+                    refreshMaskUi(); syncUiState()
+                }
+            }
+            val del = TextView(this).apply {
+                text = "Delete"
+                setTextColor(getColor(R.color.error)); textSize = 12f
+                setPadding(dp(12), dp(6), dp(4), dp(6))
+                setOnClickListener {
+                    if (!canEditPhoto()) return@setOnClickListener
+                    val m = editingState.state.masking
+                    val l = m.selected()
+                    if (index !in l.components.indices) return@setOnClickListener
+                    // select then delete
+                    var nl = l.selectComponent(index)
+                    nl = nl.deleteSelectedComponent()
+                    editingState.updateMasking(m.updateSelected(nl), "Delete Component")
+                    maskNewComponentOnStroke = true
+                    refreshMaskUi(); syncUiState(); refreshHistory(); requestPreviewRender()
+                }
+            }
+            row.addView(label)
+            row.addView(del)
+            maskComponentsList.addView(row, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+        }
+    }
+
+    private fun autoSelectMask(type: com.prabhat.photocraft.edit.MaskType) {
+        val bitmap = sourceBitmap ?: run { maskStatusTextView.text = "Open a photo first"; return }
+        val current = editingState.state.masking
+        val existingSubject = current.subject.selection
+
+        fun applySubjectMask(subject: com.prabhat.photocraft.edit.MaskSelection) {
+            val inverse = ByteArray(subject.coverage.size) { i ->
+                (255 - (subject.coverage[i].toInt() and 0xFF)).toByte()
+            }
+            val background = com.prabhat.photocraft.edit.MaskSelection(subject.width, subject.height, inverse)
+            val updated = current.copy(
+                subject = current.subject.copy(selection = subject, inverted = false),
+                background = current.background.copy(selection = background, inverted = false),
+                selectedMask = type
+            )
+            editingState.updateMasking(updated, "Select ${type.name.lowercase().replaceFirstChar { it.uppercase() }}")
+            enterMaskEditMode(); refreshMaskUi(); syncUiState(); refreshHistory()
+        }
+
+        if (type == com.prabhat.photocraft.edit.MaskType.BACKGROUND && existingSubject != null) {
+            applySubjectMask(existingSubject); return
+        }
+
+        maskStatusTextView.text = "Detecting subject..."
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val detected = selfieMaskSegmenter.createMask(bitmap)
+                val inverse = ByteArray(detected.coverage.size) { i ->
+                    (255 - (detected.coverage[i].toInt() and 0xFF)).toByte()
+                }
+                val background = com.prabhat.photocraft.edit.MaskSelection(detected.width, detected.height, inverse)
+                val latest = editingState.state.masking.copy(
+                    subject = editingState.state.masking.subject.copy(selection = detected, inverted = false),
+                    background = editingState.state.masking.background.copy(selection = background, inverted = false),
+                    selectedMask = type
+                )
+                editingState.updateMasking(latest, "Select ${type.name.lowercase().replaceFirstChar { it.uppercase() }}")
+                enterMaskEditMode(); refreshMaskUi(); syncUiState(); refreshHistory()
+            } catch (error: Exception) {
+                maskStatusTextView.text = "Subject detection failed: ${error.message ?: "try again"}"
+            }
+        }
+    }
+
+    private fun paintMaskAt(sx: Float, sy: Float) {
+        val bmp = sourceBitmap ?: return
+        val m = editingState.state.masking
+        editingState.updateMasking(
+            m.paintSelectedComponent(
+                bmp.width, bmp.height, sx, sy,
+                m.brushSize, m.brushFlow.toInt(),
+                feather = m.brushFeather.toInt()
+            ),
+            "Paint ${m.selected().name}"
+        )
+    }
+
+    private fun handleMaskTouch(x: Float, y: Float, action: Int): Boolean {
+        if (!maskEditingLayer || selectedCategory != EditorCategory.MASKING || compareHeld || sourceBitmap == null || !canEditPhoto()) {
+            return false
+        }
+        when (action) {
+            android.view.MotionEvent.ACTION_DOWN -> {
+                val bmp = sourceBitmap ?: return false
+                editingState.beginGesture()
+                maskStrokeActive = true
+                maskHasLast = false
+                val layer = editingState.state.masking.selected()
+                val needNew = maskNewComponentOnStroke || layer.selectedComponentIndex !in layer.components.indices
+                if (needNew) {
+                    val add = maskActiveTool != "Subtract"
+                    editingState.updateMasking(
+                        editingState.state.masking.ensureComponentForStroke(add, bmp.width, bmp.height),
+                        "Paint ${layer.name}"
+                    )
+                }
+                paintMaskAt(x, y)
+                maskLastX = x; maskLastY = y; maskHasLast = true
+                refreshMaskUi(); requestPreviewRender()
+                return true
+            }
+            android.view.MotionEvent.ACTION_MOVE -> {
+                if (!maskStrokeActive) return true
+                val m = editingState.state.masking
+                val spacing = kotlin.math.max(1f, m.brushSize * 0.25f)
+                val dx = x - maskLastX
+                val dy = y - maskLastY
+                val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+                if (dist >= spacing) {
+                    val steps = kotlin.math.max(1, (dist / spacing).toInt())
+                    for (i in 1..steps) {
+                        val t = i.toFloat() / steps
+                        paintMaskAt(maskLastX + dx * t, maskLastY + dy * t)
+                    }
+                } else {
+                    paintMaskAt(x, y)
+                }
+                maskLastX = x; maskLastY = y; maskHasLast = true
+                refreshMaskUi(); requestPreviewRender()
+                return true
+            }
+            android.view.MotionEvent.ACTION_UP -> {
+                if (maskStrokeActive) {
+                    maskStrokeActive = false
+                    editingState.endGesture()
+                    maskNewComponentOnStroke = true
+                    refreshMaskUi(); requestPreviewRender(); refreshHistory(); syncUiState()
+                }
+                return true
+            }
+            android.view.MotionEvent.ACTION_CANCEL -> {
+                if (maskStrokeActive) {
+                    maskStrokeActive = false
+                    editingState.cancelGesture()
+                    maskNewComponentOnStroke = true
+                    refreshMaskUi(); requestPreviewRender(); refreshHistory(); syncUiState()
+                }
+                return true
+            }
+        }
+        return false
     }
 
     private fun wireControls() {
@@ -1572,6 +1880,10 @@ class MainActivity : Activity() {
             }
             endCompare()
             selectedCategory = category
+            if (category != EditorCategory.MASKING) {
+                maskEditingLayer = false
+                maskStrokeActive = false
+            }
             applyCategoryVisibility()
             applyDisplayedBitmap()
             syncUiState()
@@ -1630,6 +1942,7 @@ class MainActivity : Activity() {
         if (sourceBitmap == null) {
             return
         }
+        closeMixPanel()
         endCompare()
         presetPanel.visibility =
             if (panel === presetPanel) View.VISIBLE else View.GONE
@@ -1760,20 +2073,35 @@ class MainActivity : Activity() {
         } else {
             View.GONE
         }
+        if (selectedCategory != EditorCategory.MASKING) {
+            maskCreateMenu.visibility = View.GONE
+            // keep editing state but hide overlay; leaving category returns via refreshMaskUi
+        }
+        if (::maskBrushOverlay.isInitialized) refreshMaskUi()
     }
 
     private fun afterHistoryChange(previousState: EditState) {
         clearExportStatus()
         updateAllRows()
+        applyAdvancedControlsFromState()
+        applyLocalMaskControlsFromState()
         applyCropControlsFromState()
         applyFilterControlsFromState()
+        if (mixOverlayVisible) syncMixUi()
         applyDisplayedBitmap()
         updateOutputSummary()
         if (
             editingState.adjustments != previousState.adjustments ||
-            editingState.filter != previousState.filter
+            editingState.filter != previousState.filter ||
+            editingState.state.effects != previousState.effects ||
+            editingState.state.colorGrading != previousState.colorGrading ||
+            editingState.state.masking != previousState.masking
         ) {
             requestPreviewRender()
+        }
+        if (maskEditingLayer && editingState.state.masking.selected().selection == null &&
+            editingState.state.masking.selectedMask != com.prabhat.photocraft.edit.MaskType.BRUSH) {
+            // subject/background may become unselected in some cases; keep overlay logic simple
         }
         refreshHistory()
         syncUiState()
@@ -1794,6 +2122,7 @@ class MainActivity : Activity() {
         }
         endCompare()
         hideActionSheet()
+        closeMixPanel()
         hideError()
 
         try {
@@ -1815,6 +2144,7 @@ class MainActivity : Activity() {
         if (!canEditPhoto() || selectedUri == null) {
             return
         }
+        closeMixPanel()
         endCompare()
         val request = buildExportRequest() ?: return
         val suggestedName = ExportNaming.suggestedFileName(currentDisplayName)
@@ -2231,6 +2561,8 @@ class MainActivity : Activity() {
         applyFilterControlsFromState()
         updatePreviewMetadata()
         updateAllRows()
+        applyAdvancedControlsFromState()
+        applyLocalMaskControlsFromState()
         updateOutputSummary()
         refreshHistory()
         emptyState.visibility = View.GONE
@@ -2409,6 +2741,36 @@ class MainActivity : Activity() {
             row.setValue(editingState.adjustments.value(adjustment))
         }
     }
+
+    private fun applyLocalMaskControlsFromState() {
+        val masking = editingState.state.masking
+        if (localMaskAdjustmentSliders.isNotEmpty()) {
+            for (control in localMaskAdjustmentSliders.values) {
+                val layer = when (control.type) {
+                    com.prabhat.photocraft.edit.MaskType.SUBJECT -> masking.subject
+                    com.prabhat.photocraft.edit.MaskType.BACKGROUND -> masking.background
+                    else -> masking.selected()
+                }
+                val value = layer.adjustments.adjustments.value(control.adjustment)
+                val progress = (value + 100).coerceIn(0, control.seekBar.max)
+                if (control.seekBar.progress != progress) control.seekBar.progress = progress
+                control.label.text = localMaskAdjustmentLabel(control.adjustment, value)
+            }
+        }
+        if (selectedMaskAdjustmentSliders.isNotEmpty()) {
+            val layer = masking.selected()
+            for ((adj, control) in selectedMaskAdjustmentSliders) {
+                val value = layer.adjustments.adjustments.value(adj)
+                val progress = (value + 100).coerceIn(0, control.seekBar.max)
+                if (control.seekBar.progress != progress) control.seekBar.progress = progress
+                control.label.text = localMaskAdjustmentLabel(adj, value)
+            }
+        }
+        if (::maskBrushOverlay.isInitialized) refreshMaskUi()
+    }
+
+    private fun localMaskAdjustmentLabel(adjustment: Adjustment, value: Int): String =
+        "${adjustment.name.lowercase().replaceFirstChar { it.uppercase() }}: $value"
 
     private fun applyCropControlsFromState() {
         suppressCropEvents = true
@@ -2651,6 +3013,13 @@ class MainActivity : Activity() {
         } else {
             View.GONE
         }
+        if (::mixEntryButton.isInitialized) {
+            mixEntryButton.isEnabled = canEdit
+            mixEntryButton.alpha = if (canEdit) 1f else 0.45f
+        }
+        if (::mixOverlay.isInitialized && !canEdit && mixOverlayVisible) {
+            closeMixPanel()
+        }
         applyCategoryVisibility()
         if (!hasPhoto) {
             outputSummary.text = ""
@@ -2854,6 +3223,414 @@ class MainActivity : Activity() {
         CropRatio.SIXTEEN_NINE -> R.string.crop_ratio_sixteen_nine
     }
 
+
+    private fun bindMixSwatch(color: HslColor, buttonId: Int, dotId: Int) {
+        val button = findViewById<View>(buttonId)
+        val dot = findViewById<View>(dotId)
+        mixSwatchButtons[color] = button
+        mixSwatchDots[color] = dot
+        button.setOnClickListener { selectMixColor(color) }
+    }
+
+    private fun setupMixControls() {
+        mixEntryButton.setOnClickListener {
+            if (canEditPhoto()) openMixPanel()
+        }
+        mixDoneButton.setOnClickListener { closeMixPanel() }
+        mixTargetButton.setOnClickListener { toggleMixTarget() }
+        mixOverlay.setOnClickListener { /* consume background taps */ }
+        mixSheet.setOnClickListener { /* consume */ }
+
+        mixPropHue.setOnClickListener { selectMixProperty(MixProperty.HUE) }
+        mixPropSaturation.setOnClickListener { selectMixProperty(MixProperty.SATURATION) }
+        mixPropLuminance.setOnClickListener { selectMixProperty(MixProperty.LUMINANCE) }
+
+        attachMixSliderDoubleTapReset()
+
+        mixSlider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (suppressMixSliderEvents) return
+                val value = mixSliderToValue(progress)
+                updateMixValueLabel(value)
+                if (fromUser && canEditPhoto() && mixOverlayVisible) {
+                    mixSliderGestureChanged = true
+                    applyMixHslValue(value, recordHistory = false)
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                if (!canEditPhoto() || !mixOverlayVisible) return
+                mixSliderGestureChanged = false
+                editingState.beginGesture()
+                clearExportStatus()
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                if (!canEditPhoto() || !mixOverlayVisible) return
+                if (mixSliderGestureChanged) {
+                    editingState.endGesture()
+                } else {
+                    editingState.cancelGesture()
+                }
+                mixSliderGestureChanged = false
+                refreshHistory()
+                syncUiState()
+                syncMixUi()
+            }
+        })
+
+        previewImage.setMixTargetTouchListener { viewX, viewY, action ->
+            handleMixTargetTouch(viewX, viewY, action)
+        }
+
+        syncMixUi()
+    }
+
+    private fun openMixPanel() {
+        if (!canEditPhoto()) return
+        endCompare()
+        hideActionSheet()
+        mixOverlayVisible = true
+        mixOverlay.visibility = View.VISIBLE
+        mixOverlay.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        mainColumn.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        mixTargetActive = false
+        selectedMixProperty = MixProperty.HUE
+        syncMixUi()
+        mixOverlay.bringToFront()
+        mixOverlay.requestFocus()
+    }
+
+    private fun closeMixPanel() {
+        if (!::mixOverlay.isInitialized) return
+        if (mixTargetDragChanged) {
+            // safety: end dangling gesture
+            editingState.endGesture()
+            mixTargetDragChanged = false
+        }
+        mixTargetActive = false
+        mixOverlayVisible = false
+        mixOverlay.visibility = View.GONE
+        mixOverlay.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        mainColumn.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        syncUiState()
+    }
+
+    private fun toggleMixTarget() {
+        if (!canEditPhoto() || !mixOverlayVisible) return
+        mixTargetActive = !mixTargetActive
+        if (!mixTargetActive && mixTargetDragChanged) {
+            editingState.endGesture()
+            mixTargetDragChanged = false
+            refreshHistory()
+            syncUiState()
+        }
+        syncMixUi()
+    }
+
+    private fun selectMixColor(color: HslColor) {
+        if (selectedMixColor == color) return
+        selectedMixColor = color
+        syncMixUi() // swatch switch: show saved values, no history
+    }
+
+    private fun selectMixProperty(property: MixProperty) {
+        if (selectedMixProperty == property) return
+        selectedMixProperty = property
+        syncMixUi()
+    }
+
+    private fun syncMixUi() {
+        if (!::mixOverlay.isInitialized) return
+        for ((color, button) in mixSwatchButtons) {
+            val dot = mixSwatchDots[color]
+            val selected = color == selectedMixColor
+            dot?.visibility = if (selected) View.VISIBLE else View.GONE
+            button.alpha = if (selected) 1f else 0.9f
+        }
+
+        mixTargetButton.isSelected = mixTargetActive
+        mixTargetButton.alpha = if (mixTargetActive) 1f else 0.85f
+
+        fun styleProp(view: TextView, active: Boolean) {
+            view.setTextColor(getColor(if (active) R.color.text_primary else R.color.text_secondary))
+            view.alpha = if (active) 1f else 0.8f
+        }
+        styleProp(mixPropHue, selectedMixProperty == MixProperty.HUE)
+        styleProp(mixPropSaturation, selectedMixProperty == MixProperty.SATURATION)
+        styleProp(mixPropLuminance, selectedMixProperty == MixProperty.LUMINANCE)
+
+        val (labelRes, min, max, value) = currentMixPropertyState()
+        mixSliderLabel.setText(labelRes)
+        suppressMixSliderEvents = true
+        mixSlider.max = max - min
+        mixSlider.progress = (value - min).coerceIn(0, mixSlider.max)
+        suppressMixSliderEvents = false
+        updateMixValueLabel(value)
+        updateMixSliderTrack()
+    }
+
+    private fun currentMixPropertyState(): QuadInt {
+        val adj = editingState.state.colorGrading.hsl.adjustment(selectedMixColor)
+        return when (selectedMixProperty) {
+            MixProperty.HUE -> QuadInt(R.string.mix_hue, -180, 180, adj.hue)
+            MixProperty.SATURATION -> QuadInt(R.string.mix_saturation, -100, 100, adj.saturation)
+            MixProperty.LUMINANCE -> QuadInt(R.string.mix_luminance, -100, 100, adj.luminance)
+        }
+    }
+
+    private data class QuadInt(val label: Int, val min: Int, val max: Int, val value: Int)
+
+    private fun mixSliderToValue(progress: Int): Int = when (selectedMixProperty) {
+        MixProperty.HUE -> progress - 180
+        else -> progress - 100
+    }
+
+    private fun updateMixValueLabel(value: Int) {
+        mixSliderValue.text = if (value > 0) "+$value" else value.toString()
+    }
+
+    private fun applyMixHslValue(value: Int, recordHistory: Boolean) {
+        val state = editingState.state.colorGrading
+        val old = state.hsl.adjustment(selectedMixColor)
+        val updatedAdj = when (selectedMixProperty) {
+            MixProperty.HUE -> old.copy(hue = value.coerceIn(-180, 180))
+            MixProperty.SATURATION -> old.copy(saturation = value.coerceIn(-100, 100))
+            MixProperty.LUMINANCE -> old.copy(luminance = value.coerceIn(-100, 100))
+        }
+        val updated = state.copy(hsl = replaceHsl(state.hsl, selectedMixColor, updatedAdj))
+        if (editingState.updateColorGrading(updated, "HSL ${selectedMixColor.name.lowercase().replaceFirstChar { it.uppercase() }}")) {
+            if (!recordHistory) {
+                // inside gesture updates are fine; outside would create history but we manage gestures
+            }
+            clearExportStatus()
+            requestPreviewRender()
+            syncUiState()
+        }
+    }
+
+    private fun attachMixSliderDoubleTapReset() {
+        var suppressTouch = false
+        val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(event: MotionEvent): Boolean = true
+            override fun onDoubleTap(event: MotionEvent): Boolean {
+                if (!mixOverlayVisible || !canEditPhoto() || !mixSlider.isEnabled) return false
+                val state = currentMixPropertyState()
+                if (state.value == 0) return true
+                suppressTouch = true
+                editingState.beginGesture()
+                clearExportStatus()
+                applyMixHslValue(0, recordHistory = false)
+                editingState.endGesture()
+                refreshHistory()
+                syncUiState()
+                syncMixUi()
+                return true
+            }
+        })
+        mixSlider.setOnTouchListener { _, event ->
+            if (suppressTouch) {
+                if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    suppressTouch = false
+                }
+                true
+            } else {
+                detector.onTouchEvent(event)
+                if (suppressTouch) true else false
+            }
+        }
+    }
+
+    private fun handleMixTargetTouch(viewX: Float, viewY: Float, action: Int): Boolean {
+        when (action) {
+            MotionEvent.ACTION_DOWN -> {
+                if (!mixOverlayVisible || !mixTargetActive || !canEditPhoto() || sourceBitmap == null) {
+                    return false
+                }
+                editingState.beginGesture()
+                clearExportStatus()
+                mixTargetDragChanged = false
+                mixTargetLastX = viewX
+                mixTargetLastY = viewY
+                mixTargetAccum = 0f
+                sampleMixColorAt(viewX, viewY)?.let { if (it != selectedMixColor) selectedMixColor = it }
+                syncMixUi()
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = viewX - mixTargetLastX
+                val dy = viewY - mixTargetLastY
+                mixTargetLastX = viewX
+                mixTargetLastY = viewY
+                val delta = dx - dy
+                val scale = when (selectedMixProperty) {
+                    MixProperty.HUE -> 0.35f
+                    else -> 0.25f
+                }
+                mixTargetAccum += delta * scale
+                val step = mixTargetAccum.toInt()
+                if (step != 0) {
+                    mixTargetAccum -= step
+                    val cur = currentMixPropertyState().value
+                    val next = (cur + step).coerceIn(currentMixPropertyState().min, currentMixPropertyState().max)
+                    if (next != cur) {
+                        mixTargetDragChanged = true
+                        applyMixHslValue(next, recordHistory = false)
+                        syncMixUi()
+                    }
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (mixTargetDragChanged) {
+                    editingState.endGesture()
+                } else {
+                    editingState.cancelGesture()
+                }
+                mixTargetDragChanged = false
+                refreshHistory()
+                syncUiState()
+                syncMixUi()
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun sampleMixColorAt(viewX: Float, viewY: Float): HslColor? {
+        val bitmap = sourceBitmap ?: return null
+        // map view coords to source bitmap coords similar to CropPreviewView logic
+        val crop = if (selectedCategory == EditorCategory.CROP || compareHeld) com.prabhat.photocraft.edit.CropSelection.FULL else editingState.crop
+        val vw = previewImage.width.toFloat()
+        val vh = previewImage.height.toFloat()
+        if (vw <= 0f || vh <= 0f) return null
+        val srcLeft = crop.left * bitmap.width
+        val srcTop = crop.top * bitmap.height
+        val srcW = (crop.right - crop.left) * bitmap.width
+        val srcH = (crop.bottom - crop.top) * bitmap.height
+        if (srcW <= 0f || srcH <= 0f) return null
+        val scale = minOf(vw / srcW, vh / srcH)
+        val dw = srcW * scale
+        val dh = srcH * scale
+        val left = (vw - dw) / 2f
+        val top = (vh - dh) / 2f
+        if (viewX < left || viewX > left + dw || viewY < top || viewY > top + dh) return null
+        val sx = (srcLeft + (viewX - left) / dw * srcW).toInt().coerceIn(0, bitmap.width - 1)
+        val sy = (srcTop + (viewY - top) / dh * srcH).toInt().coerceIn(0, bitmap.height - 1)
+        val pixel = bitmap.getPixel(sx, sy)
+        val r = ((pixel shr 16) and 0xFF) / 255f
+        val g = ((pixel shr 8) and 0xFF) / 255f
+        val b = (pixel and 0xFF) / 255f
+        val hsl = rgbToHslLocal(r, g, b)
+        val hue = hsl[0]
+        return HslColor.entries.minByOrNull { hueDistance(hue, it.centerHue) }
+    }
+
+    private fun hueDistance(a: Float, b: Float): Float {
+        val d = kotlin.math.abs(a - b) % 360f
+        return if (d > 180f) 360f - d else d
+    }
+
+    private fun rgbToHslLocal(r: Float, g: Float, b: Float): FloatArray {
+        val maximum = maxOf(r, g, b)
+        val minimum = minOf(r, g, b)
+        val delta = maximum - minimum
+        var hue = 0f
+        val lightness = (maximum + minimum) / 2f
+        val saturation = if (delta == 0f) 0f else delta / (1f - kotlin.math.abs(2f * lightness - 1f))
+        if (delta != 0f) {
+            hue = when (maximum) {
+                r -> 60f * (((g - b) / delta) % 6f)
+                g -> 60f * ((b - r) / delta + 2f)
+                else -> 60f * ((r - g) / delta + 4f)
+            }
+        }
+        val wrapped = hue % 360f
+        return floatArrayOf(if (wrapped < 0f) wrapped + 360f else wrapped, saturation, lightness)
+    }
+
+    private fun hslToRgbLocal(h: Float, s: Float, l: Float): IntArray {
+        val hh = ((h % 360f) + 360f) % 360f
+        val ss = s.coerceIn(0f, 1f)
+        val ll = l.coerceIn(0f, 1f)
+        val c = (1f - kotlin.math.abs(2f * ll - 1f)) * ss
+        val x = c * (1f - kotlin.math.abs((hh / 60f) % 2f - 1f))
+        val m = ll - c / 2f
+        val rgb = when {
+            hh < 60f -> floatArrayOf(c, x, 0f)
+            hh < 120f -> floatArrayOf(x, c, 0f)
+            hh < 180f -> floatArrayOf(0f, c, x)
+            hh < 240f -> floatArrayOf(0f, x, c)
+            hh < 300f -> floatArrayOf(x, 0f, c)
+            else -> floatArrayOf(c, 0f, x)
+        }
+        fun to255(v: Float) = ((v + m).coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255)
+        return intArrayOf(to255(rgb[0]), to255(rgb[1]), to255(rgb[2]))
+    }
+
+    private fun updateMixSliderTrack() {
+        val colors = mixTrackColors()
+        val gradient = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors)
+        gradient.cornerRadius = dp(2).toFloat()
+        val height = dp(4)
+        val bg = GradientDrawable().apply {
+            setColor(Color.parseColor("#3A3A42"))
+            cornerRadius = dp(2).toFloat()
+        }
+        // set progress drawable layers
+        val progress = mixSlider.progressDrawable
+        if (progress is LayerDrawable) {
+            val bgLayer = progress.findDrawableByLayerId(android.R.id.background)
+            (bgLayer as? GradientDrawable)?.setColor(Color.parseColor("#3A3A42"))
+            val progLayer = progress.findDrawableByLayerId(android.R.id.progress)
+            if (progLayer is ClipDrawable) {
+                // replace clip drawable content? easier set whole drawable
+            }
+        }
+        val clip = ClipDrawable(gradient, Gravity.LEFT, ClipDrawable.HORIZONTAL)
+        val layers = LayerDrawable(arrayOf(bg, clip))
+        layers.setId(0, android.R.id.background)
+        layers.setId(1, android.R.id.progress)
+        layers.setLayerHeight(0, height)
+        layers.setLayerHeight(1, height)
+        layers.setLayerGravity(0, Gravity.CENTER_VERTICAL)
+        layers.setLayerGravity(1, Gravity.CENTER_VERTICAL)
+        mixSlider.progressDrawable = layers
+        mixSlider.invalidate()
+    }
+
+    private fun mixTrackColors(): IntArray {
+        val adj = editingState.state.colorGrading.hsl.adjustment(selectedMixColor)
+        val baseHue = selectedMixColor.centerHue
+        return when (selectedMixProperty) {
+            MixProperty.HUE -> {
+                IntArray(7) { i ->
+                    val h = baseHue + (i - 3) * 60f
+                    val rgb = hslToRgbLocal(h, 0.85f, 0.55f)
+                    Color.rgb(rgb[0], rgb[1], rgb[2])
+                }
+            }
+            MixProperty.SATURATION -> {
+                val h = baseHue
+                IntArray(5) { i ->
+                    val sat = i / 4f
+                    val rgb = hslToRgbLocal(h, sat, 0.5f)
+                    Color.rgb(rgb[0], rgb[1], rgb[2])
+                }
+            }
+            MixProperty.LUMINANCE -> {
+                val h = baseHue
+                val sat = (0.7f + adj.saturation / 200f).coerceIn(0.1f, 1f)
+                IntArray(5) { i ->
+                    val lum = i / 4f
+                    val rgb = hslToRgbLocal(h, sat, lum)
+                    Color.rgb(rgb[0], rgb[1], rgb[2])
+                }
+            }
+        }
+    }
+
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         val snapshot = editingState.snapshot()
@@ -2928,6 +3705,18 @@ class MainActivity : Activity() {
     }
 
     private fun consumeActionSheetBack(): Boolean {
+        if (::maskBrushOverlay.isInitialized && maskEditingLayer && selectedCategory == EditorCategory.MASKING) {
+            exitMaskEditMode(keepEdits = true)
+            return true
+        }
+        if (::maskCreateMenu.isInitialized && maskCreateMenu.visibility == View.VISIBLE) {
+            maskCreateMenu.visibility = View.GONE
+            return true
+        }
+        if (::mixOverlay.isInitialized && mixOverlay.visibility == View.VISIBLE) {
+            closeMixPanel()
+            return true
+        }
         if (
             ::actionSheetOverlay.isInitialized &&
             actionSheetOverlay.visibility == View.VISIBLE

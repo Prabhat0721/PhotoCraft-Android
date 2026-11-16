@@ -150,4 +150,19 @@
     <string name="error_export_write">The JPEG could not be saved. Choose a destination and try again.</string>
     <string name="error_export_no_destination">No destination was returned. Try exporting again.</string>
     <string name="footer">PhotoCraft / M5.3   •   PHOTO-FIRST STUDIO</string>
+    <string name="mix">Mix</string>
+    <string name="color_mix">Color Mix</string>
+    <string name="done">Done</string>
+    <string name="mix_target">Target adjustment</string>
+    <string name="mix_hue">Hue</string>
+    <string name="mix_saturation">Saturation</string>
+    <string name="mix_luminance">Luminance</string>
+    <string name="mix_red">Red</string>
+    <string name="mix_orange">Orange</string>
+    <string name="mix_yellow">Yellow</string>
+    <string name="mix_green">Green</string>
+    <string name="mix_aqua">Aqua</string>
+    <string name="mix_blue">Blue</string>
+    <string name="mix_purple">Purple</string>
+    <string name="mix_magenta">Magenta</string>
 </resources>
