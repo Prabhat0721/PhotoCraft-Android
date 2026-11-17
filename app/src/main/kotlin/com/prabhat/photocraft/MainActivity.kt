@@ -755,6 +755,8 @@ class MainActivity : Activity() {
     private enum class GradeRegion { SHADOWS, MIDTONES, HIGHLIGHTS, GLOBAL }
     private var selectedGradeRegion = GradeRegion.SHADOWS
     private var gradeWheelView: ColorGradingWheelView? = null
+    private var selectedMaskGradeRegion = GradeRegion.SHADOWS
+    private var selectedMaskGradeWheel: ColorGradingWheelView? = null
 
     private fun localizedHslColor(color: HslColor): String = getString(
         when (color) {
@@ -2174,6 +2176,72 @@ class MainActivity : Activity() {
         Adjustment.values().filter { it.group == AdjustmentGroup.LIGHT }.forEach { addAdjustment(it) }
         addGroupTitle("COLOR")
         Adjustment.values().filter { it.group == AdjustmentGroup.COLOR }.forEach { addAdjustment(it) }
+
+        addGroupTitle(getString(R.string.color_grading_title))
+        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        GradeRegion.entries.forEachIndexed { index, region ->
+            tabs.addView(Button(this).apply {
+                text = localizedGradeRegion(region)
+                isAllCaps = false
+                isSelected = region == selectedMaskGradeRegion
+                setOnClickListener {
+                    selectedMaskGradeRegion = region
+                    for (tabIndex in 0 until tabs.childCount) {
+                        tabs.getChildAt(tabIndex).isSelected = tabIndex == index
+                    }
+                    val layer = editingState.state.masking.selected()
+                    selectedMaskGradeWheel?.setGrade(
+                        gradeFor(layer.adjustments.colorGrading, selectedMaskGradeRegion)
+                    )
+                }
+            }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        }
+        maskSelectedAdjustments.addView(tabs)
+
+        selectedMaskGradeWheel = ColorGradingWheelView(this).apply {
+            id = R.id.maskSelectedColorGradingWheel
+            setGrade(gradeFor(
+                editingState.state.masking.selected().adjustments.colorGrading,
+                selectedMaskGradeRegion
+            ))
+            setOnGradeGestureListener(
+                onStart = { if (canEditPhoto()) editingState.beginGesture() },
+                onEnd = {
+                    if (canEditPhoto()) {
+                        editingState.endGesture()
+                        refreshHistory()
+                        syncUiState()
+                    }
+                }
+            )
+            setOnGradeChangedListener { nextGrade ->
+                if (!canEditPhoto()) return@setOnGradeChangedListener
+                val masking = editingState.state.masking
+                val layer = masking.selected()
+                val updated = layer.copy(adjustments = layer.adjustments.copy(
+                    colorGrading = withGrade(
+                        layer.adjustments.colorGrading,
+                        selectedMaskGradeRegion,
+                        nextGrade
+                    )
+                ))
+                if (editingState.updateMasking(
+                        masking.updateSelected(updated),
+                        getString(R.string.history_local_mask_adjustment,
+                            localizedMaskName(layer), getString(R.string.color_grading_title))
+                    )
+                ) {
+                    clearExportStatus()
+                    requestPreviewRender()
+                    refreshHistory()
+                    syncUiState()
+                }
+            }
+        }
+        maskSelectedAdjustments.addView(selectedMaskGradeWheel, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(220)
+        ))
     }
 
     private fun enterMaskEditMode() {
@@ -2228,6 +2296,11 @@ class MainActivity : Activity() {
                     if (control.seekBar.progress != p) control.seekBar.progress = p
                     control.label.text = localMaskAdjustmentLabel(adj, v)
                 }
+            }
+            if (editing) {
+                selectedMaskGradeWheel?.setGrade(
+                    gradeFor(layer.adjustments.colorGrading, selectedMaskGradeRegion)
+                )
             }
         } else {
             maskStatusTextView.text = "Tap + to create a mask."

@@ -106,17 +106,15 @@ class PhotoCraftEditorInstrumentedTest {
         onView(withId(R.id.maskAddButton)).perform(scrollTo(), click())
         onView(withId(R.id.maskBrushButton)).perform(scrollTo(), click())
 
-        var selectionReady = false
+        var selectionHasCoverage = false
         activityRule.scenario.onActivity { activity ->
             val preview = activity.findViewById<CropPreviewView>(R.id.previewImage)
             val x = preview.width / 2f
             val y = preview.height / 2f
             dispatchTapAt(preview, x, y)
-            selectionReady = activity.findViewById<android.widget.TextView>(
-                R.id.maskStatusText
-            ).text.contains(activity.getString(R.string.mask_selection_ready))
+            selectionHasCoverage = hasNonZeroCoverage(editingState(activity).state.masking.selected())
         }
-        assertTrue("A brush stroke should create a mask selection", selectionReady)
+        assertTrue("A brush stroke should create nonzero effective coverage", selectionHasCoverage)
     }
 
     @Test
@@ -126,15 +124,20 @@ class PhotoCraftEditorInstrumentedTest {
         onView(withId(R.id.maskAddButton)).perform(scrollTo(), click())
         onView(withId(R.id.maskBrushButton)).perform(scrollTo(), click())
 
+        var maskIdBeforeDone = ""
         activityRule.scenario.onActivity { activity ->
             val preview = activity.findViewById<CropPreviewView>(R.id.previewImage)
             dispatchTapAt(preview, preview.width / 2f, preview.height / 2f)
+            val selected = editingState(activity).state.masking.selected()
+            maskIdBeforeDone = selected.id
+            assertTrue("Brush painting should create effective coverage", hasNonZeroCoverage(selected))
         }
         onView(withId(R.id.maskDoneButton)).perform(scrollTo(), click())
         activityRule.scenario.onActivity { activity ->
             val selected = editingState(activity).state.masking.selected()
             assertTrue("Finishing mask edit must not disable the mask", selected.enabled)
-            assertTrue("Finishing mask edit must retain its painted area", selected.selection != null)
+            assertEquals("Done should leave the same mask selected", maskIdBeforeDone, selected.id)
+            assertTrue("Done must retain the same mask's effective painted coverage", hasNonZeroCoverage(selected))
         }
     }
 
@@ -218,8 +221,15 @@ class PhotoCraftEditorInstrumentedTest {
         activityRule.scenario.onActivity { activity ->
             val preview = activity.findViewById<CropPreviewView>(R.id.previewImage)
             dispatchTapAt(preview, preview.width / 2f, preview.height / 2f)
-            val wheel = activity.findViewById<ColorGradingWheelView>(R.id.maskColorGradingWheel)
-            dispatchTapAt(wheel, wheel.width * 0.75f, wheel.height / 2f)
+            val panel = activity.findViewById<android.widget.LinearLayout>(R.id.maskSelectedAdjustments)
+            val wheel = activity.findViewById<ColorGradingWheelView>(R.id.maskSelectedColorGradingWheel)
+            assertTrue("Selected-mask panel should be visible", panel.isShown)
+            assertTrue("Selected-mask grading wheel should be visible", wheel.isShown)
+            assertTrue("Selected-mask wheel should be laid out before touch", wheel.isLaidOut)
+            assertTrue("Selected-mask wheel needs nonzero dimensions", wheel.width > 0 && wheel.height > 0)
+            assertTrue("Wheel should belong to the selected-mask panel", wheel.parent === panel)
+            val radius = minOf(wheel.width, wheel.height) * 0.25f
+            dispatchTapAt(wheel, wheel.width / 2f + radius, wheel.height / 2f)
 
             val field = MainActivity::class.java.getDeclaredField("editingState")
             field.isAccessible = true
@@ -244,6 +254,9 @@ class PhotoCraftEditorInstrumentedTest {
         field.isAccessible = true
         return field.get(activity) as com.prabhat.photocraft.edit.EditingState
     }
+
+    private fun hasNonZeroCoverage(layer: com.prabhat.photocraft.edit.MaskLayer): Boolean =
+        layer.effectiveSelection()?.coverage?.any { (it.toInt() and 0xFF) > 0 } == true
 
     private fun deliverPickedPhoto(activity: MainActivity, uri: Uri) {
         val callback = MainActivity::class.java.getDeclaredMethod(
@@ -288,22 +301,26 @@ class PhotoCraftEditorInstrumentedTest {
             PointF(firstX, centerY),
             PointF(secondX, centerY)
         ))
+        val expandingHalfSpans = listOf(36f, 50f, 66f, 82f)
+        expandingHalfSpans.forEachIndexed { index, halfSpan ->
+            dispatch(view, twoPointerEvent(
+                downTime,
+                downTime + 40L + index * 20L,
+                MotionEvent.ACTION_MOVE,
+                PointF(centerX - halfSpan, centerY),
+                PointF(centerX + halfSpan, centerY)
+            ))
+        }
+        val finalHalfSpan = expandingHalfSpans.last()
         dispatch(view, twoPointerEvent(
             downTime,
-            downTime + 50L,
-            MotionEvent.ACTION_MOVE,
-            PointF(centerX - 70f, centerY),
-            PointF(centerX + 70f, centerY)
-        ))
-        dispatch(view, twoPointerEvent(
-            downTime,
-            downTime + 70L,
+            downTime + 130L,
             MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
-            PointF(centerX - 70f, centerY),
-            PointF(centerX + 70f, centerY)
+            PointF(centerX - finalHalfSpan, centerY),
+            PointF(centerX + finalHalfSpan, centerY)
         ))
         dispatch(view, singlePointerEvent(
-            downTime, downTime + 90L, MotionEvent.ACTION_UP, centerX - 70f, centerY
+            downTime, downTime + 150L, MotionEvent.ACTION_UP, centerX - finalHalfSpan, centerY
         ))
     }
 

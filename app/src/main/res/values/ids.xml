@@ -1,4 +1,5 @@
 <resources>
     <item name="colorGradingWheel" type="id" />
     <item name="maskColorGradingWheel" type="id" />
+    <item name="maskSelectedColorGradingWheel" type="id" />
 </resources>
