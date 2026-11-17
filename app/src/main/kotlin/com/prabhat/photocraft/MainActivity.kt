@@ -828,6 +828,10 @@ class MainActivity : Activity() {
         advancedLabels.clear()
         advancedLabelTitles.clear()
 
+        val gradingRegionButtons = LinkedHashMap<GradeRegion, Button>()
+        val regionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
         for (region in GradeRegion.entries) {
             val button = Button(this).apply {
                 text = localizedGradeRegion(region)
@@ -1663,9 +1667,16 @@ class MainActivity : Activity() {
 
 
 
-    private fun setupLocalMaskAdjustmentControls(container: LinearLayout) {
+    private fun setupLocalMaskAdjustmentControls(
+        container: LinearLayout,
+        type: com.prabhat.photocraft.edit.MaskType
+    ) {
         val initialMasking = editingState.state.masking
-        val initialLayer = initialMasking.selected()
+        val initialLayer = if (type == com.prabhat.photocraft.edit.MaskType.SUBJECT) {
+            initialMasking.subject
+        } else {
+            initialMasking.background
+        }
         container.removeAllViews()
 
         fun addGroupTitle(title: String) {
