@@ -60,17 +60,14 @@ class PhotoCraftEditorInstrumentedTest {
         onView(withId(R.id.maskingPanel)).check(matches(isDisplayed()))
         var layersBefore = 0
         activityRule.scenario.onActivity { activity ->
-            layersBefore = activity.findViewById<android.widget.LinearLayout>(
-                R.id.maskLayerList
-            ).childCount
+            layersBefore = editingState(activity).state.masking.brushLayers.size
         }
         onView(withId(R.id.maskAddButton)).perform(scrollTo(), click())
+        onView(withId(R.id.maskBrushButton)).perform(scrollTo(), click())
 
         var layersAfter = 0
         activityRule.scenario.onActivity { activity ->
-            layersAfter = activity.findViewById<android.widget.LinearLayout>(
-                R.id.maskLayerList
-            ).childCount
+            layersAfter = editingState(activity).state.masking.brushLayers.size
         }
         assertEquals(layersBefore + 1, layersAfter)
         onView(withId(R.id.maskStatusText)).perform(scrollTo()).check(matches(isDisplayed()))
@@ -78,18 +75,14 @@ class PhotoCraftEditorInstrumentedTest {
         onView(withId(R.id.undoButton)).check(matches(isEnabled())).perform(click())
         var layersAfterUndo = -1
         activityRule.scenario.onActivity { activity ->
-            layersAfterUndo = activity.findViewById<android.widget.LinearLayout>(
-                R.id.maskLayerList
-            ).childCount
+            layersAfterUndo = editingState(activity).state.masking.brushLayers.size
         }
         assertEquals(layersBefore, layersAfterUndo)
 
         onView(withId(R.id.redoButton)).check(matches(isEnabled())).perform(click())
         var layersAfterRedo = -1
         activityRule.scenario.onActivity { activity ->
-            layersAfterRedo = activity.findViewById<android.widget.LinearLayout>(
-                R.id.maskLayerList
-            ).childCount
+            layersAfterRedo = editingState(activity).state.masking.brushLayers.size
         }
         assertEquals(layersBefore + 1, layersAfterRedo)
     }
@@ -111,6 +104,7 @@ class PhotoCraftEditorInstrumentedTest {
         loadTestPhoto()
         onView(withId(R.id.maskingCategory)).perform(click())
         onView(withId(R.id.maskAddButton)).perform(scrollTo(), click())
+        onView(withId(R.id.maskBrushButton)).perform(scrollTo(), click())
 
         var selectionReady = false
         activityRule.scenario.onActivity { activity ->
@@ -126,44 +120,31 @@ class PhotoCraftEditorInstrumentedTest {
     }
 
     @Test
-    fun maskPreviewToggleDoesNotDisableOrClearTheSelectedMask() {
+    fun finishingMaskEditDoesNotDisableOrClearTheSelectedMask() {
         loadTestPhoto()
         onView(withId(R.id.maskingCategory)).perform(click())
         onView(withId(R.id.maskAddButton)).perform(scrollTo(), click())
+        onView(withId(R.id.maskBrushButton)).perform(scrollTo(), click())
 
         activityRule.scenario.onActivity { activity ->
             val preview = activity.findViewById<CropPreviewView>(R.id.previewImage)
             dispatchTapAt(preview, preview.width / 2f, preview.height / 2f)
         }
+        onView(withId(R.id.maskDoneButton)).perform(scrollTo(), click())
         activityRule.scenario.onActivity { activity ->
-            val layerList = activity.findViewById<android.widget.LinearLayout>(R.id.maskLayerList)
-            val selectedRow = layerList.getChildAt(layerList.childCount - 1) as android.widget.LinearLayout
-            selectedRow.getChildAt(2).performClick()
-            val field = MainActivity::class.java.getDeclaredField("editingState")
-            field.isAccessible = true
-            val state = field.get(activity) as com.prabhat.photocraft.edit.EditingState
-            val selected = state.state.masking.selected()
-            assertTrue("Turning off the overlay must not disable the mask", selected.enabled)
-            assertTrue("Turning off the overlay must retain its painted area", selected.selection != null)
-            assertEquals(
-                activity.getString(R.string.mask_preview_off),
-                (selectedRow.getChildAt(2) as android.widget.Button).text
-            )
+            val selected = editingState(activity).state.masking.selected()
+            assertTrue("Finishing mask edit must not disable the mask", selected.enabled)
+            assertTrue("Finishing mask edit must retain its painted area", selected.selection != null)
         }
     }
 
     @Test
-    fun subjectAndBackgroundAppearOnceInTheMaskLayerList() {
+    fun subjectAndBackgroundMaskCreationOptionsAppearInTheMenu() {
         loadTestPhoto()
         onView(withId(R.id.maskingCategory)).perform(click())
-        var layerCount = 0
-        activityRule.scenario.onActivity { activity ->
-            layerCount = activity.findViewById<android.widget.LinearLayout>(
-                R.id.maskLayerList
-            ).childCount
-        }
-        assertEquals("Only one Subject and one Background layer should be listed", 2, layerCount)
-        onView(withId(R.id.maskAutoDetectButton)).check(matches(isDisplayed()))
+        onView(withId(R.id.maskAddButton)).perform(scrollTo(), click())
+        onView(withId(R.id.maskSubjectButton)).perform(scrollTo()).check(matches(isDisplayed()))
+        onView(withId(R.id.maskBackgroundButton)).perform(scrollTo()).check(matches(isDisplayed()))
     }
 
     @Test
@@ -233,6 +214,7 @@ class PhotoCraftEditorInstrumentedTest {
         loadTestPhoto()
         onView(withId(R.id.maskingCategory)).perform(click())
         onView(withId(R.id.maskAddButton)).perform(scrollTo(), click())
+        onView(withId(R.id.maskBrushButton)).perform(scrollTo(), click())
         activityRule.scenario.onActivity { activity ->
             val preview = activity.findViewById<CropPreviewView>(R.id.previewImage)
             dispatchTapAt(preview, preview.width / 2f, preview.height / 2f)
@@ -255,6 +237,12 @@ class PhotoCraftEditorInstrumentedTest {
             deliverPickedPhoto(activity, photoUri)
         }
         waitForEnabled(activityRule.scenario, R.id.colorCategory)
+    }
+
+    private fun editingState(activity: MainActivity): com.prabhat.photocraft.edit.EditingState {
+        val field = MainActivity::class.java.getDeclaredField("editingState")
+        field.isAccessible = true
+        return field.get(activity) as com.prabhat.photocraft.edit.EditingState
     }
 
     private fun deliverPickedPhoto(activity: MainActivity, uri: Uri) {
