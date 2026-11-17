@@ -286,11 +286,28 @@ class PhotoCraftEditorInstrumentedTest {
     }
 
     private fun dispatchPinch(view: View) {
+        val configuration = android.view.ViewConfiguration.get(view.context)
+        val spanSlop = configuration.scaledTouchSlop * 2f
+        val initialSpan = spanSlop
+        val scaleStartSpan = maxOf(
+            configuration.scaledMinimumScalingSpan.toFloat(),
+            initialSpan + spanSlop
+        ) + 1f
+        val finalSpan = scaleStartSpan * 1.3f
+        val finalHalfSpan = finalSpan / 2f
+
+        // The 32 × 24 test photo is fitted into the preview without cropping.
+        val renderedWidth = minOf(view.width.toFloat(), view.height * (32f / 24f))
+        assertTrue(
+            "A ${finalSpan}px pinch must fit inside the ${renderedWidth}px rendered preview",
+            view.isShown && view.isLaidOut && finalSpan < renderedWidth
+        )
+
         val centerX = view.width / 2f
         val centerY = view.height / 2f
         val downTime = SystemClock.uptimeMillis()
-        val firstX = centerX - 24f
-        val secondX = centerX + 24f
+        val firstX = centerX - initialSpan / 2f
+        val secondX = centerX + initialSpan / 2f
         dispatch(view, singlePointerEvent(
             downTime, downTime, MotionEvent.ACTION_DOWN, firstX, centerY
         ))
@@ -301,7 +318,7 @@ class PhotoCraftEditorInstrumentedTest {
             PointF(firstX, centerY),
             PointF(secondX, centerY)
         ))
-        val expandingHalfSpans = listOf(36f, 50f, 66f, 82f)
+        val expandingHalfSpans = listOf(scaleStartSpan / 2f, finalHalfSpan)
         expandingHalfSpans.forEachIndexed { index, halfSpan ->
             dispatch(view, twoPointerEvent(
                 downTime,
@@ -311,7 +328,6 @@ class PhotoCraftEditorInstrumentedTest {
                 PointF(centerX + halfSpan, centerY)
             ))
         }
-        val finalHalfSpan = expandingHalfSpans.last()
         dispatch(view, twoPointerEvent(
             downTime,
             downTime + 130L,
